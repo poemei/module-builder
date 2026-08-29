@@ -1,0 +1,1 @@
+{"module":"module_builder","name":"Module Builder","version":"1.0.4","description":"Admin-only ChAoS MVC module workspace.","routes":[],"files":["controllers/module_builder.php","lib/module_package_builder.php","views/admin/index.php"]}
