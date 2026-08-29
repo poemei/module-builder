@@ -116,12 +116,6 @@ Non-secret certification identity is configured in:
 user/data/certified_developer.json
 ```
 
-The certification query endpoint is configured through:
-
-```text
-CHAOS_CERTIFICATION_ENDPOINT
-```
-
 Private signing keys are **never stored by Module Builder**.
 
 When signing is authorized, the private key is supplied for the individual signing request and is not retained.
@@ -169,8 +163,6 @@ Module Builder is intentionally useful **before certification**.
 Developers can use it to learn the ChAoS MVC module structure, create projects, experiment, validate their work, and produce packages.
 
 Certification represents trusted release authority.
-
-It is not permission to learn or develop.
 
 ---
 
