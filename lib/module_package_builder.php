@@ -7,15 +7,15 @@ class module_package_builder
  private string $modules; private string $releases;
  public function __construct(?string $modules=null,?string $releases=null){$this->modules=$modules??USERROOT.'/modules';$this->releases=$releases??dirname(USERROOT).'/releases';$this->mkdir($this->modules);$this->mkdir($this->releases);}
  public function isValidSlug(string $s):bool{return(bool)preg_match('/^[a-z][a-z0-9_]{1,62}$/',$s);}
- public function listProjects():array{$out=[];foreach(glob($this->modules.'/*',GLOB_ONLYDIR)?:[]as$d){$s=basename($d);if($s===self::SELF||!$this->isValidSlug($s)||is_link($d))continue;$m=$this->json($d.'/module.json',false);$out[]=['slug'=>$s,'name'=>(string)($m['name']??$s),'version'=>(string)($m['version']??''),'description'=>(string)($m['description']??'')];}usort($out,fn($a,$b)=>strcmp($a['slug'],$b['slug']));return$out;}
+ public function listProjects():array{$out=[];foreach(glob($this->modules.'/*',GLOB_ONLYDIR)?:[]as$d){$s=basename($d);if($s===self::SELF||!$this->isValidSlug($s)||is_link($d))continue;$m=$this->json($d.'/module.json',false);$out[]=['slug'=>$s,'name'=>(string)($m['name']??$s),'version'=>(string)($m['version']??''),'description'=>(string)($m['description']??''),'update_url'=>(string)($m['update_url']??''),'creator'=>(string)($m['creator']??''),'domain'=>(string)($m['domain']??''),'certified'=>(string)($m['certified']??'No'),'signing'=>is_array($m['signing']??null)?$m['signing']:[]];}usort($out,fn($a,$b)=>strcmp($a['slug'],$b['slug']));return$out;}
  public function createProject(array $in):void
  {
-  $s=strtolower(trim((string)($in['slug']??'')));$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$this->meta($s,$n,$v);if($s===self::SELF)throw new InvalidArgumentException('Reserved slug.');
-  $r=$this->modules.'/'.$s;if(file_exists($r))throw new RuntimeException('Project exists.');foreach(['/controllers','/models','/views/admin']as$d)$this->mkdir($r.$d);
-  $files=['controllers/'.$s.'.php','models/'.$s.'_model.php','views/index.php','views/admin/index.php'];
-  try{$this->write($r.'/module.json',$this->encode(['module'=>$s,'name'=>$n,'version'=>$v,'description'=>trim((string)($in['description']??'')),'routes'=>['index'],'files'=>$files]));$this->write($r.'/controllers/'.$s.'.php',$this->controller($s));$this->write($r.'/models/'.$s.'_model.php',$this->model($s));$this->write($r.'/views/index.php',$this->publicView($n));$this->write($r.'/views/admin/index.php',$this->adminView($n));}catch(Throwable$e){$this->remove($r);throw$e;}
+  $s=strtolower(trim((string)($in['slug']??'')));$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$metadata=$this->projectMetadata($s,$n,$v,$in);if($s===self::SELF)throw new InvalidArgumentException('Reserved slug.');
+  $r=$this->modules.'/'.$s;if(file_exists($r))throw new RuntimeException('Project exists.');foreach(['/controllers','/models','/views/admin','/docs']as$d)$this->mkdir($r.$d);
+  $files=['controllers/'.$s.'.php','models/'.$s.'_model.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];$metadata['files']=$files;$metadata['routes']=['index'];
+  try{$this->write($r.'/module.json',$this->encode($metadata));$this->write($r.'/controllers/'.$s.'.php',$this->controller($s));$this->write($r.'/models/'.$s.'_model.php',$this->model($s));$this->write($r.'/views/index.php',$this->publicView($n));$this->write($r.'/views/admin/'.$s.'.php',$this->adminView($n));$this->write($r.'/docs/CHANGELOG.md',$this->changelog($v));}catch(Throwable$e){$this->remove($r);throw$e;}
  }
- public function editProject(string$s,array$in):void{$r=$this->root($s);$m=$this->json($r.'/module.json');$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$this->meta($s,$n,$v);$m['module']=$s;$m['name']=$n;$m['version']=$v;$m['description']=trim((string)($in['description']??''));$this->write($r.'/module.json',$this->encode($m));}
+ public function editProject(string$s,array$in):void{$r=$this->root($s);$m=$this->json($r.'/module.json');$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$updated=$this->projectMetadata($s,$n,$v,$in);$updated['files']=$m['files']??['controllers/'.$s.'.php','models/'.$s.'_model.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];$updated['routes']=$m['routes']??['index'];$this->write($r.'/module.json',$this->encode($updated));}
  public function deleteProject(string$s):void{$this->remove($this->root($s));}
  public function fileTree(string$s):array{$r=$this->root($s);$o=[];$it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($r,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::SELF_FIRST);foreach($it as$i){if($i->isLink())continue;$o[]=['path'=>str_replace('\\','/',substr($i->getPathname(),strlen($r)+1)),'directory'=>$i->isDir()];}usort($o,fn($a,$b)=>strcmp($a['path'],$b['path']));return$o;}
  public function readFile(string$s,string$p):string{$f=$this->existing($s,$p,true);$this->editable($f);$c=file_get_contents($f);if(!is_string($c))throw new RuntimeException('Read failed.');return$c;}
@@ -26,11 +26,27 @@ class module_package_builder
  public function deletePath(string$s,string$p):void{$f=$this->existing($s,$p,false);if(is_dir($f))$this->remove($f);elseif(!unlink($f))throw new RuntimeException('Delete failed.');}
  public function validateProject(string$s):array
  {
-  $r=$this->root($s);$m=$this->json($r.'/module.json',false);$e=[];$c=$r.'/controllers/'.$s.'.php';$v=$r.'/views/index.php';
-  if(($m['module']??null)!==$s)$e[]='module metadata must match slug.';foreach(['name','version','routes','files']as$f)if(!array_key_exists($f,$m))$e[]='Missing metadata: '.$f;
+  $r=$this->root($s);$m=$this->json($r.'/module.json',false);$e=[];$c=$r.'/controllers/'.$s.'.php';$v=$r.'/views/index.php';$admin='views/admin/'.$s.'.php';
+  if(($m['module']??null)!==$s)$e[]='module metadata must match slug.';
+  foreach(['name','module','version','description','update_url','creator','domain','certified','signing','files','routes']as$f)if(!array_key_exists($f,$m))$e[]='Missing metadata: '.$f;
+  if(isset($m['update_url'])&&(filter_var($m['update_url'],FILTER_VALIDATE_URL)===false||parse_url($m['update_url'],PHP_URL_SCHEME)!=='https'))$e[]='update_url must be valid HTTPS.';
+  if(isset($m['certified'])&&!in_array($m['certified'],['Yes','No'],true))$e[]='certified must be Yes or No.';
+  $signing=$m['signing']??null;if(!is_array($signing))$e[]='signing metadata must be an object.';else{
+   foreach(['sha256','key_id','public_key']as$f)if(!array_key_exists($f,$signing))$e[]='Missing signing metadata: '.$f;
+   $hasSigning=implode('',array_map('strval',$signing))!=='';
+   if(($m['certified']??'No')==='Yes'||$hasSigning){
+    if(!preg_match('/^[a-f0-9]{64}$/',(string)($signing['sha256']??'')))$e[]='signing.sha256 must be lowercase SHA-256.';
+    if(!preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/',(string)($signing['key_id']??'')))$e[]='signing.key_id is invalid.';
+    $pem=base64_decode((string)($signing['public_key']??''),true);if($pem===false||!str_contains($pem,'-----BEGIN PUBLIC KEY-----'))$e[]='signing.public_key must be base64 public PEM.';
+   }
+  }
   if(!is_file($c))$e[]='Required controller missing.';else{$x=(string)file_get_contents($c);if(!preg_match('/function\s+index\s*\(/',$x))$e[]='Controller index() missing.';if(!preg_match('/function\s+admin\s*\(/',$x))$e[]='Controller admin() missing.';}
   if(!is_file($v))$e[]='views/index.php missing.';else{$x=(string)file_get_contents($v);foreach(["APPROOT . '/views/inc/head.php'","APPROOT . '/views/inc/foot.php'"]as$w)if(!str_contains($x,$w))$e[]='Public wrapper missing: '.$w;}
-  if(!is_array($m['routes']??null)||!in_array('index',$m['routes'],true))$e[]='routes[] must include index.';if(!is_array($m['files']??null)||!in_array('views/index.php',$m['files'],true))$e[]='files must include views/index.php.';return['valid'=>$e===[],'errors'=>$e];
+  if(!is_file($r.'/'.$admin))$e[]=$admin.' missing.';
+  if(!is_array($m['routes']??null)||!in_array('index',$m['routes'],true))$e[]='routes[] must include index.';
+  foreach(['controllers/'.$s.'.php','models/'.$s.'_model.php',$admin,'views/index.php','docs/CHANGELOG.md']as$f)if(!is_array($m['files']??null)||!in_array($f,$m['files'],true))$e[]='files must include '.$f.'.';
+  if(!is_file($r.'/docs/CHANGELOG.md'))$e[]='docs/CHANGELOG.md missing.';
+  return['valid'=>$e===[],'errors'=>$e];
  }
  public function buildRelease(string$s):string
  {
@@ -45,16 +61,240 @@ class module_package_builder
   $id=$this->json(USERROOT.'/data/certified_developer.json',false);$url=trim((string)(getenv('CHAOS_CERTIFICATION_ENDPOINT')?:''));$s=['certified'=>false,'signing'=>false,'message'=>'Full development and unsigned packaging available; signing is not configured.'];if($url===''||$id===[])return$s;if(!$this->https($url)){$s['message']='Certification endpoint must be public HTTPS.';return$s;}
   $q=http_build_query(['developer_id'=>(string)($id['developer_id']??''),'domain'=>(string)($id['domain']??($_SERVER['HTTP_HOST']??'')),'key_id'=>(string)($id['key_id']??''),'capability'=>'module_signing']);$raw=@file_get_contents($url.'?'.$q,false,stream_context_create(['http'=>['timeout'=>5,'ignore_errors'=>true]]));$r=is_string($raw)?json_decode($raw,true):null;if(!is_array($r)){$s['message']='Certification status unavailable; unsigned development remains available.';return$s;}$s['certified']=($r['certified']??false)===true;$s['signing']=$s['certified']&&($r['signing']['module']??false)===true;$s['key_id']=(string)($r['key_id']??'');$s['message']=$s['signing']?'Certified signing authorized; private keys are never retained.':'Unsigned development remains fully available; signing not authorized.';return$s;
  }
- public function signRelease(string$s,string$a,array$u):void
+ /**
+  * Generate an encrypted 3072-bit RSA keypair for SHA-256 signatures.
+  *
+  * The returned PEM material exists only in memory and must be downloaded by
+  * the caller. Module Builder never writes generated keys to disk.
+  */
+ public function generateSigningKeypair(string $passphrase,string $keyPrefix='developer'):array
  {
-  if(!$this->certificationStatus()['signing'])throw new RuntimeException('Signing not authorized.');if(!preg_match('/^[a-z][a-z0-9_]{1,62}-[0-9A-Za-z.+_-]+\.zip$/',$a))throw new InvalidArgumentException('Invalid artifact.');if(($u['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK||!is_uploaded_file((string)($u['tmp_name']??'')))throw new RuntimeException('ChAoS MVC-issued key required.');
-  $p=$this->artifactRoot($s,false).'/'.$a;if(!is_file($p)||is_link($p))throw new RuntimeException('Artifact missing.');$pem=file_get_contents((string)$u['tmp_name']);$key=is_string($pem)?openssl_pkey_get_private($pem):false;$pem=null;if($key===false)throw new RuntimeException('Invalid key.');$sig='';if(!openssl_sign(hash_file('sha256',$p),$sig,$key,OPENSSL_ALGO_SHA256))throw new RuntimeException('Signing failed.');$this->write($p.'.sig',base64_encode($sig).PHP_EOL);
+  if(!extension_loaded('openssl'))throw new RuntimeException('The PHP OpenSSL extension is required.');
+  $keyPrefix=strtolower(trim($keyPrefix));
+  if(!preg_match('/^[a-z0-9][a-z0-9_-]{1,31}$/',$keyPrefix))throw new InvalidArgumentException('Use a lowercase key ID prefix with letters, numbers, underscores, or hyphens.');
+  if(strlen($passphrase)<12)throw new InvalidArgumentException('Use a key passphrase of at least 12 characters.');
+  if(strlen($passphrase)>1024)throw new InvalidArgumentException('The key passphrase is too long.');
+
+  $key=openssl_pkey_new([
+   'config'=>dirname(__DIR__).'/config/openssl.cnf',
+   'private_key_type'=>OPENSSL_KEYTYPE_RSA,
+   'private_key_bits'=>3072,
+   'digest_alg'=>'sha256',
+  ]);
+  if($key===false)throw new RuntimeException('OpenSSL could not generate the RSA keypair.');
+
+  $private='';
+  if(!openssl_pkey_export($key,$private,$passphrase,[
+   'config'=>dirname(__DIR__).'/config/openssl.cnf',
+   'digest_alg'=>'sha256',
+  ]))
+   throw new RuntimeException('OpenSSL could not export the encrypted private key.');
+
+  $details=openssl_pkey_get_details($key);
+  if(!is_array($details)||!isset($details['key']))
+   throw new RuntimeException('OpenSSL could not export the public key.');
+
+  $public=(string)$details['key'];
+  $fingerprint=hash('sha256',$public);
+  $keyId=$keyPrefix.'-'.substr($fingerprint,0,16);
+
+  return[
+   'format'=>'chaos-rsa-signing-keypair',
+   'version'=>1,
+   'algorithm'=>'RSA-SHA256',
+   'rsa_bits'=>(int)($details['bits']??3072),
+   'fingerprint_sha256'=>$fingerprint,
+   'sha256'=>$fingerprint,
+   'key_id'=>$keyId,
+   'public_key'=>base64_encode($public),
+   'created_at'=>gmdate('c'),
+   'private_key_encrypted'=>true,
+   'private_key_pem'=>$private,
+   'public_key_pem'=>$public,
+   'instructions'=>'Store this download securely. Module Builder has not retained a copy.',
+  ];
+ }
+
+ /**
+  * Build a standards-compliant ZIP in memory without writing key material.
+  */
+ public function buildSigningKeypairZip(array $pair):string
+ {
+  $private=$pair['private_key_pem']??null;
+  $public=$pair['public_key_pem']??null;
+  if(!is_string($private)||!str_contains($private,'BEGIN ENCRYPTED PRIVATE KEY'))
+   throw new InvalidArgumentException('Encrypted private-key PEM is missing.');
+  if(!is_string($public)||!str_contains($public,'BEGIN PUBLIC KEY'))
+   throw new InvalidArgumentException('Public-key PEM is missing.');
+
+  $metadata=[
+   'format'=>(string)($pair['format']??'chaos-rsa-signing-keypair'),
+   'version'=>(int)($pair['version']??1),
+   'algorithm'=>(string)($pair['algorithm']??'RSA-SHA256'),
+   'rsa_bits'=>(int)($pair['rsa_bits']??3072),
+   'fingerprint_sha256'=>(string)($pair['fingerprint_sha256']??''),
+   'sha256'=>(string)($pair['sha256']??''),
+   'key_id'=>(string)($pair['key_id']??''),
+   'public_key'=>(string)($pair['public_key']??''),
+   'created_at'=>(string)($pair['created_at']??gmdate('c')),
+   'private_key_encrypted'=>true,
+   'private_key_file'=>'private-key.pem',
+   'public_key_file'=>'public-key.pem',
+   'instructions'=>'Store private-key.pem securely. Module Builder has not retained a copy.',
+  ];
+  $json=json_encode($metadata,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES);
+  if(!is_string($json))throw new RuntimeException('Key metadata could not be encoded.');
+
+  $zip=$this->storedZip([
+   'private-key.pem'=>$private,
+   'public-key.pem'=>$public,
+   'key-metadata.json'=>$json.PHP_EOL,
+  ]);
+
+  $private=null;
+  $public=null;
+  $metadata=[];
+  $json=null;
+  return$zip;
+ }
+
+ /**
+  * Create a small uncompressed ZIP entirely in memory.
+  */
+ private function storedZip(array $files):string
+ {
+  $local='';
+  $central='';
+  $offset=0;
+  $now=getdate();
+  $year=max(1980,(int)$now['year']);
+  $dosTime=((int)$now['hours']<<11)|((int)$now['minutes']<<5)|(int)floor((int)$now['seconds']/2);
+  $dosDate=(($year-1980)<<9)|((int)$now['mon']<<5)|(int)$now['mday'];
+
+  foreach($files as$name=>$data){
+   if(!is_string($name)||!preg_match('/^[a-z0-9._-]+$/',$name)||!is_string($data))
+    throw new InvalidArgumentException('Invalid in-memory ZIP entry.');
+   $size=strlen($data);
+   $crc=(int)hexdec(hash('crc32b',$data));
+   $nameLength=strlen($name);
+   $header=pack(
+    'VvvvvvVVVvv',
+    0x04034b50,20,0x0800,0,$dosTime,$dosDate,$crc,$size,$size,$nameLength,0
+   );
+   $local.=$header.$name.$data;
+   $central.=pack(
+    'VvvvvvvVVVvvvvvVV',
+    0x02014b50,20,20,0x0800,0,$dosTime,$dosDate,$crc,$size,$size,
+    $nameLength,0,0,0,0,0,$offset
+   ).$name;
+   $offset+=strlen($header)+$nameLength+$size;
+  }
+
+  $count=count($files);
+  return$local.$central.pack(
+   'VvvvvVVv',
+   0x06054b50,0,0,$count,$count,strlen($central),strlen($local),0
+  );
+ }
+
+ /**
+  * Build and sign a release using a one-request uploaded encrypted PEM.
+  */
+ public function buildAndSignRelease(string$s,array$upload,string$passphrase):string
+ {
+  if(($upload['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK||!is_uploaded_file((string)($upload['tmp_name']??'')))throw new RuntimeException('The encrypted private-key.pem upload is required.');
+  $pem=file_get_contents((string)$upload['tmp_name']);
+  if(!is_string($pem))throw new RuntimeException('The private key could not be read.');
+  try{return$this->buildAndSignReleaseWithPem($s,$pem,$passphrase);}
+  finally{$pem=null;}
+ }
+
+ /**
+  * Build and sign from PEM already held in memory.
+  */
+ public function buildAndSignReleaseWithPem(string$s,string$pem,string$passphrase):string
+ {
+  if($passphrase==='')throw new InvalidArgumentException('The private-key passphrase is required.');
+  $root=$this->root($s);$metadata=$this->json($root.'/module.json');
+  if(($metadata['certified']??'No')!=='Yes')throw new RuntimeException('The module must be marked certified before a signed release can be built.');
+  $signing=$metadata['signing']??[];
+  if(!is_array($signing)||!preg_match('/^[a-f0-9]{64}$/',(string)($signing['sha256']??''))||trim((string)($signing['key_id']??''))===''||trim((string)($signing['public_key']??''))==='')throw new RuntimeException('Complete developer signing metadata is required.');
+
+  $key=@openssl_pkey_get_private($pem,$passphrase);
+  if($key===false)throw new RuntimeException('The private key or passphrase is invalid.');
+  $details=openssl_pkey_get_details($key);
+  if(!is_array($details)||!isset($details['key']))throw new RuntimeException('The private key public identity could not be read.');
+  $public=(string)$details['key'];
+  $expectedPublic=preg_replace('/\s+/','',(string)$signing['public_key'])??'';
+  if(!hash_equals($expectedPublic,base64_encode($public)))throw new RuntimeException('The private key does not match module.json signing.public_key.');
+  if(!hash_equals((string)$signing['sha256'],hash('sha256',$public)))throw new RuntimeException('The private key does not match module.json signing.sha256.');
+
+  $artifact=$this->buildRelease($s);
+  $signature='';
+  $payload=hash_file('sha256',$artifact);
+  if(!is_string($payload)||!openssl_sign($payload,$signature,$key,OPENSSL_ALGO_SHA256)){
+   @unlink($artifact);
+   throw new RuntimeException('The release could not be signed.');
+  }
+
+  $signaturePath=$artifact.'.sig';
+  $this->write($signaturePath,base64_encode($signature).PHP_EOL);
+  $base=basename($artifact,'.zip');
+  $manifestPath=$this->artifactRoot($s,false).'/'.$base.'.manifest.json';
+  $manifest=$this->json($manifestPath);
+  $manifest['signed']=true;
+  $manifest['signature']=basename($signaturePath);
+  $manifest['signature_algorithm']='RSA-SHA256';
+  $manifest['key_id']=(string)$signing['key_id'];
+  $manifest['signed_at']=gmdate('c');
+  $this->write($manifestPath,$this->encode($manifest));
+
+  $pem=null;$public=null;$signature=null;$payload=null;
+  return$artifact;
  }
  private function root(string$s):string{if(!$this->isValidSlug($s)||$s===self::SELF)throw new InvalidArgumentException('Invalid project.');$base=realpath($this->modules);$r=is_link($this->modules.'/'.$s)?false:realpath($this->modules.'/'.$s);if($base===false||$r===false||!str_starts_with($r,$base.DIRECTORY_SEPARATOR))throw new RuntimeException('Project outside module root.');return$r;}
  private function path(string$p):string{$p=trim(str_replace('\\','/',$p),'/');if($p===''||strlen($p)>240||str_contains($p,'..')||str_contains($p,"\0")||!preg_match('#^[A-Za-z0-9._/-]+$#',$p))throw new InvalidArgumentException('Invalid relative path.');return$p;}
  private function existing(string$s,string$p,bool$file):string{$r=$this->root($s);$x=$r.DIRECTORY_SEPARATOR.str_replace('/',DIRECTORY_SEPARATOR,$this->path($p));$y=is_link($x)?false:realpath($x);if($y===false||!str_starts_with($y,$r.DIRECTORY_SEPARATOR)||($file&&!is_file($y)))throw new RuntimeException('Path outside project or missing.');return$y;}
  private function fresh(string$s,string$p):string{$r=$this->root($s);$x=$r.DIRECTORY_SEPARATOR.str_replace('/',DIRECTORY_SEPARATOR,$this->path($p));$parent=is_link(dirname($x))?false:realpath(dirname($x));if($parent===false||!str_starts_with($parent,$r.DIRECTORY_SEPARATOR))throw new RuntimeException('Destination outside project.');return$x;}
  private function editable(string$p):void{if(!in_array(strtolower(pathinfo($p,PATHINFO_EXTENSION)),self::TEXT,true))throw new InvalidArgumentException('Unsupported editor file type.');if(is_file($p)&&filesize($p)>self::LIMIT)throw new RuntimeException('Editor limit exceeded.');}
+ private function projectMetadata(string$s,string$n,string$v,array$in):array
+ {
+  $this->meta($s,$n,$v);
+  $description=trim((string)($in['description']??''));
+  $updateUrl=trim((string)($in['update_url']??''));
+  $creator=trim((string)($in['creator']??''));
+  $domain=strtolower(trim((string)($in['domain']??'')));
+  $certified=(string)($in['certified']??'No');
+  $sha=strtolower(trim((string)($in['signing_sha256']??'')));
+  $keyId=strtolower(trim((string)($in['signing_key_id']??'')));
+  $publicKey=preg_replace('/\s+/','',trim((string)($in['signing_public_key']??'')))??'';
+
+  if($description===''||strlen($description)>500)throw new InvalidArgumentException('Description is required and must be 500 characters or fewer.');
+  if(filter_var($updateUrl,FILTER_VALIDATE_URL)===false||strtolower((string)parse_url($updateUrl,PHP_URL_SCHEME))!=='https')throw new InvalidArgumentException('A valid HTTPS update URL is required.');
+  if($creator===''||strlen($creator)>100)throw new InvalidArgumentException('Creator is required and must be 100 characters or fewer.');
+  if(!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/',$domain))throw new InvalidArgumentException('A valid domain name is required.');
+  if(!in_array($certified,['Yes','No'],true))throw new InvalidArgumentException('Certified must be Yes or No.');
+
+  $hasSigning=$sha!==''||$keyId!==''||$publicKey!=='';
+  if($certified==='Yes'||$hasSigning){
+   if(!preg_match('/^[a-f0-9]{64}$/',$sha))throw new InvalidArgumentException('Signing SHA-256 must be 64 lowercase hexadecimal characters.');
+   if(!preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/',$keyId))throw new InvalidArgumentException('A lowercase signing key ID is required.');
+   $decoded=base64_decode($publicKey,true);
+   if($decoded===false||!str_contains($decoded,'-----BEGIN PUBLIC KEY-----')||!str_contains($decoded,'-----END PUBLIC KEY-----'))throw new InvalidArgumentException('Signing public key must be a base64-encoded public PEM.');
+  }
+
+  return[
+   'name'=>$n,
+   'module'=>$s,
+   'version'=>$v,
+   'description'=>$description,
+   'update_url'=>$updateUrl,
+   'creator'=>$creator,
+   'domain'=>$domain,
+   'certified'=>$certified,
+   'signing'=>['sha256'=>$sha,'key_id'=>$keyId,'public_key'=>$publicKey],
+  ];
+ }
  private function meta(string$s,string$n,string$v):void{if(!$this->isValidSlug($s))throw new InvalidArgumentException('Invalid lowercase slug.');if($n===''||strlen($n)>100)throw new InvalidArgumentException('Name required.');if(!preg_match('/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/',$v))throw new InvalidArgumentException('Semantic version required.');}
  private function artifactRoot(string$s,bool$create):string{$this->root($s);$r=$this->releases.'/'.$s;if($create)$this->mkdir($r);return$r;}
  private function json(string$p,bool$required=true):array{if(!is_file($p)||is_link($p)){if($required)throw new RuntimeException('JSON missing.');return[];}$x=file_get_contents($p);$d=is_string($x)?json_decode($x,true):null;if(!is_array($d)){if($required)throw new RuntimeException('JSON invalid.');return[];}return$d;}
@@ -63,9 +303,14 @@ class module_package_builder
  private function mkdir(string$p):void{if(!is_dir($p)&&!mkdir($p,0755,true))throw new RuntimeException('Directory create failed.');}
  private function remove(string$r):void{if(is_link($r)){if(!unlink($r))throw new RuntimeException('Delete failed.');return;}if(!is_dir($r)){if(is_file($r)&&!unlink($r))throw new RuntimeException('Delete failed.');return;}$it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($r,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);foreach($it as$i){$p=$i->getPathname();if(!(($i->isLink()||$i->isFile())?unlink($p):rmdir($p)))throw new RuntimeException('Delete failed.');}if(!rmdir($r))throw new RuntimeException('Delete failed.');}
  private function https(string$u):bool{$p=parse_url($u);if(!is_array($p)||strtolower((string)($p['scheme']??''))!=='https'||empty($p['host'])||isset($p['user'])||isset($p['pass']))return false;$h=strtolower((string)$p['host']);if($h==='localhost'||str_ends_with($h,'.local'))return false;$ip=filter_var($h,FILTER_VALIDATE_IP);return$ip===false||filter_var($ip,FILTER_VALIDATE_IP,FILTER_FLAG_NO_PRIV_RANGE|FILTER_FLAG_NO_RES_RANGE)!==false;}
- private function controller(string$s):string{return"<?php\n/* [AI:GPT-5.6 Sol | ".gmdate('Y-m-d H:i:s')." UTC] */\nclass {$s} extends controller\n{\n public function index(array \$params=[]):void{\$this->view('index',['params'=>\$params]);}\n public function admin(array \$params=[]):void{\$this->require_admin(7);\$this->view('admin/index',['params'=>\$params]);}\n}\n/* [End AI:GPT-5.6 Sol] */\n";}
+ private function controller(string$s):string{return"<?php\n/* [AI:GPT-5.6 Sol | ".gmdate('Y-m-d H:i:s')." UTC] */\nclass {$s} extends controller\n{\n public function index(array \$params=[]):void{\$this->view('index',['params'=>\$params]);}\n public function admin(array \$params=[]):void{\$this->require_admin(7);\$this->view('admin/{$s}',['params'=>\$params]);}\n}\n/* [End AI:GPT-5.6 Sol] */\n";}
  private function model(string$s):string{return"<?php\n/* [AI:GPT-5.6 Sol | ".gmdate('Y-m-d H:i:s')." UTC] */\nclass {$s}_model extends model{}\n/* [End AI:GPT-5.6 Sol] */\n";}
  private function publicView(string$n):string{$n=htmlspecialchars($n,ENT_QUOTES,'UTF-8');return"<?php require APPROOT . '/views/inc/head.php'; ?>\n<?php /* [AI:GPT-5.6 Sol | ".gmdate('Y-m-d H:i:s')." UTC] */ ?>\n<main class=\"container py-5\"><h1>{$n}</h1></main>\n<?php /* [End AI:GPT-5.6 Sol] */ ?>\n<?php require APPROOT . '/views/inc/foot.php'; ?>\n";}
+
+ private function changelog(string$v):string
+ {
+  return "# Changelog\n\n## {$v} — ".gmdate('Y-m-d')."\n\n### Added\n\n- Initial module implementation.\n";
+ }
  private function adminView(string$n):string{$n=htmlspecialchars($n,ENT_QUOTES,'UTF-8');return"<?php /* [AI:GPT-5.6 Sol | ".gmdate('Y-m-d H:i:s')." UTC] */ ?>\n<section class=\"container-fluid py-4\"><h1>{$n}</h1><p>Module administration.</p></section>\n<?php /* [End AI:GPT-5.6 Sol] */ ?>\n";}
 }
 /* [End AI:GPT-5.6 Sol] */

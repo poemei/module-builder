@@ -2,13 +2,13 @@
 
 > **Build modules. Validate them. Package them. Ship them.**
 
-**Module Builder 1.0.4** is the developer workspace for creating and packaging modules for ChAoS MVC.
+**Module Builder 1.0.5** is the developer workspace for creating and packaging modules for ChAoS MVC.
 
 It provides a controlled development environment inside ChAoS MVC while keeping module development where it belongs: **outside the Core.**
 
 ---
 
-## ✦ Module Builder 1.0.4
+## ✦ Module Builder 1.0.5
 
 Module Builder is an **admin-only development tool**.
 
@@ -36,17 +36,15 @@ Your releases remain generated artifacts.
 
 ```text
 Create
-  ↓
+  ->
 Develop
-  ↓
+  ->
 Validate
-  ↓
-Build
-  ↓
-Artifacts
-  ↓
-Sign
-  ↓
+  ->
+Build & Sign
+  ->
+Signed Artifacts
+  ->
 Release
 ```
 
@@ -70,6 +68,17 @@ A project may contain its own:
 ```
 
 The live module directory is authoritative.
+
+Every generated `module.json` declares, in order: `name`, `module`,
+`version`, `description`, `update_url`, `creator`, `domain`,
+`certified`, `signing`, `files`, and `routes`. The `signing` object
+always contains `sha256`, `key_id`, and the base64-encoded
+`public_key`. Unsigned projects keep those three values empty and use
+`"certified": "No"`.
+
+The required generated source shape includes `controllers/<slug>.php`,
+`models/<slug>_model.php`, `views/admin/<slug>.php`, and
+`views/index.php`, and `docs/CHANGELOG.md`; the public `index` route is declared explicitly. New projects initialize the changelog with the selected version and UTC creation date.
 
 Module Builder does not maintain a second editable copy of the project inside `/releases`.
 
@@ -105,10 +114,12 @@ Uncertified developers retain the ability to:
 - Create modules
 - Develop and edit module projects
 - Validate projects
-- Build packages
-- Generate unsigned release artifacts
+- Generate their own RSA-SHA256 identity
+- Populate signing metadata when ready
 
-Certification adds the ability to produce **ChAoS-certified signed releases**.
+New projects begin with blank signing values. A release is produced through the
+combined **Build & Sign Release** action after the developer supplies the
+module signing metadata, matching encrypted private PEM, and passphrase.
 
 Non-secret certification identity is configured in:
 
@@ -117,6 +128,15 @@ user/data/certified_developer.json
 ```
 
 Private signing keys are **never stored by Module Builder**.
+
+Module Builder can generate a Windows-compatible 3072-bit RSA keypair for
+RSA-SHA256 signing. The private PEM is encrypted with a developer-supplied
+passphrase. The keypair downloads as a ZIP containing `private-key.pem`,
+`public-key.pem`, and `key-metadata.json`. The metadata provides the
+developer-generated `sha256`, `key_id`, and base64 `public_key` values
+used by `module.json`. The generator uses the bundled
+`config/openssl.cnf` so it does not depend on a working global Windows
+OpenSSL configuration. No generated key material is written to the server.
 
 When signing is authorized, the private key is supplied for the individual signing request and is not retained.
 
@@ -192,6 +212,6 @@ Grow outward.
 
 ---
 
-**ChAoS MVC Module Builder 1.0.4**
+**ChAoS MVC Module Builder 1.0.5**
 
 *Protect the Core. Grow outward.*
