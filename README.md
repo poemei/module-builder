@@ -186,6 +186,9 @@ Certification represents trusted release authority.
 
 ---
 
+## ✦ Documentation
+[CHANGELOG](docs/CHANGELOG.md)
+
 ## ✦ Philosophy
 
 ChAoS MVC modules extend the framework without consuming the framework.
