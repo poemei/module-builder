@@ -2,6 +2,20 @@
 
 All notable changes to ChAoS MVC Module Builder are documented here.
 
+## 1.0.6 — 2026-08-31
+
+### Changed
+
+- Initial project creation now collects only the module's basic metadata.
+- Certification and RSA-SHA256 identity are configured after the project exists.
+
+### Fixed
+
+- Removed certification and signing fields from initial project creation.
+- New projects now always begin with `"certified": "No"` and blank `sha256`, `key_id`, and `public_key` values.
+- Creation requests can no longer inject certification or signing metadata.
+- Clarified that SHA-256 is derived from the generated RSA public key rather than invented for a draft module.
+
 ## 1.0.5 — 2026-08-30
 
 ### Added

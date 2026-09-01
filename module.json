@@ -1,7 +1,7 @@
 {
     "module": "module_builder",
     "name": "Module Builder",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "description": "Admin-only ChAoS MVC module workspace.",
     "routes": [],
     "files": [

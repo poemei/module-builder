@@ -47,8 +47,7 @@ try {
         'slug'=>'weather','name'=>'Weather','version'=>'1.0.0',
         'description'=>'Weather module for ChAoS MVC',
         'update_url'=>'https://example.com/updates/weather.json',
-        'creator'=>'Test Developer','domain'=>'example.com','certified'=>'No',
-        'signing_sha256'=>'','signing_key_id'=>'','signing_public_key'=>'',
+        'creator'=>'Test Developer','domain'=>'example.com',
     ]);
     $validation = $builder->validateProject('weather');
     if (!$validation['valid']) $fail('Generated project invalid: ' . implode('; ', $validation['errors']));
@@ -57,6 +56,17 @@ try {
     $expectedKeys = ['name','module','version','description','update_url','creator','domain','certified','signing','files','routes'];
     if (array_keys($metadata) !== $expectedKeys) $fail('module metadata shape or order invalid');
     if ($metadata['certified'] !== 'No' || $metadata['signing'] !== ['sha256'=>'','key_id'=>'','public_key'=>'']) $fail('unsigned signing shape invalid');
+    $builder->deleteProject('weather');
+    $builder->createProject([
+        'slug'=>'weather','name'=>'Weather','version'=>'1.0.0',
+        'description'=>'Weather module for ChAoS MVC',
+        'update_url'=>'https://example.com/updates/weather.json',
+        'creator'=>'Test Developer','domain'=>'example.com','certified'=>'Yes',
+        'signing_sha256'=>str_repeat('a',64),'signing_key_id'=>'forced-key',
+        'signing_public_key'=>base64_encode("-----BEGIN PUBLIC KEY-----\ninvalid\n-----END PUBLIC KEY-----\n"),
+    ]);
+    $metadata = json_decode((string) file_get_contents($modules . '/weather/module.json'), true);
+    if ($metadata['certified'] !== 'No' || $metadata['signing'] !== ['sha256'=>'','key_id'=>'','public_key'=>'']) $fail('project creation accepted signing metadata');
     if (!in_array('views/index.php', $metadata['files'], true)) $fail('index view manifest entry missing');
     if (!in_array('views/admin/weather.php', $metadata['files'], true) || !is_file($modules . '/weather/views/admin/weather.php')) $fail('slug admin view missing');
     if (!in_array('docs/CHANGELOG.md', $metadata['files'], true) || !is_file($modules . '/weather/docs/CHANGELOG.md')) $fail('generated changelog missing');
