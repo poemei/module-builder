@@ -2,13 +2,13 @@
 
 > **Build modules. Validate them. Package them. Ship them.**
 
-**Module Builder 1.0.5** is the developer workspace for creating and packaging modules for ChAoS MVC.
+**Module Builder 1.0.6** is the developer workspace for creating and packaging modules for ChAoS MVC.
 
 It provides a controlled development environment inside ChAoS MVC while keeping module development where it belongs: **outside the Core.**
 
 ---
 
-## ✦ Module Builder 1.0.5
+## ✦ Module Builder 1.0.6
 
 Module Builder is an **admin-only development tool**.
 
@@ -117,7 +117,10 @@ Uncertified developers retain the ability to:
 - Generate their own RSA-SHA256 identity
 - Populate signing metadata when ready
 
-New projects begin with blank signing values. A release is produced through the
+Initial project creation does not request certification or signing values. New
+projects are always created with `"certified": "No"` and blank `sha256`,
+`key_id`, and `public_key` values. After creation, the developer can generate
+an RSA-SHA256 identity and add its metadata from Project Settings. A release is produced through the
 combined **Build & Sign Release** action after the developer supplies the
 module signing metadata, matching encrypted private PEM, and passphrase.
 
@@ -215,6 +218,6 @@ Grow outward.
 
 ---
 
-**ChAoS MVC Module Builder 1.0.5**
+**ChAoS MVC Module Builder 1.0.6**
 
 *Protect the Core. Grow outward.*

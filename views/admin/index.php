@@ -12,7 +12,7 @@ $hasSigning=$current!==null
 require APPROOT . '/views/inc/head.php';
 ?>
 <main class="container-fluid py-4">
- <div class="d-flex justify-content-between mb-4"><div><h1>Module Builder <small class="text-muted">1.0.5</small></h1><p>Live source: <code>user/modules/&lt;slug&gt;/</code>. Output: root <code>/releases</code>.</p></div><span class="badge <?= $certification['signing']?'bg-success':'bg-secondary' ?> p-2 align-self-start"><?= $certification['signing']?'Certified signing':'Unsigned development' ?></span></div>
+ <div class="d-flex justify-content-between mb-4"><div><h1>Module Builder <small class="text-muted">1.0.6</small></h1><p>Live source: <code>user/modules/&lt;slug&gt;/</code>. Output: root <code>/releases</code>.</p></div><span class="badge <?= $certification['signing']?'bg-success':'bg-secondary' ?> p-2 align-self-start"><?= $certification['signing']?'Certified signing':'Unsigned development' ?></span></div>
  <?php if($message):?><div class="alert alert-success"><?=$e($message)?></div><?php endif?><?php if($error):?><div class="alert alert-danger"><?=$e($error)?></div><?php endif?>
  <div class="alert alert-light border"><strong>Certification:</strong> <?=$e($certification['message'])?></div>
  <section class="card mb-4">
@@ -39,12 +39,7 @@ require APPROOT . '/views/inc/head.php';
    <label class="form-label">Update URL<input class="form-control" type="url" name="update_url" placeholder="https://example.com/updates/module.json" required></label>
    <label class="form-label">Creator<input class="form-control" name="creator" required maxlength="100"></label>
    <label class="form-label">Domain<input class="form-control" name="domain" placeholder="example.com" required></label>
-   <label class="form-label">Certified<select class="form-select" name="certified"><option value="No">No</option><option value="Yes">Yes</option></select></label>
-   <details class="mb-3"><summary>Developer signing metadata</summary>
-    <label class="form-label mt-2">SHA-256<input class="form-control font-monospace" name="signing_sha256" pattern="[a-f0-9]{64}"></label>
-    <label class="form-label">Key ID<input class="form-control font-monospace" name="signing_key_id"></label>
-    <label class="form-label">Base64 public PEM<textarea class="form-control font-monospace" name="signing_public_key" rows="4"></textarea></label>
-   </details>
+   <p class="small text-muted">Signing metadata starts blank. Create the project first, then generate or add its RSA-SHA256 identity from Project Settings.</p>
    <button class="btn btn-primary w-100">Create</button>
   </form></div>
  </aside><section class="col-xl-9"><?php if($current):?>
