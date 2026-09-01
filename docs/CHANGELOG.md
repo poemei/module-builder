@@ -6,15 +6,18 @@ All notable changes to ChAoS MVC Module Builder are documented here.
 
 ### Changed
 
-- Initial project creation now collects only the module's basic metadata.
-- Certification and RSA-SHA256 identity are configured after the project exists.
+- The standalone RSA-SHA256 keypair generator remains available at the top of Module Builder.
+- Initial project creation asks for no keypair, SHA-256, or passphrase data.
+- Clicking **Create** makes the server generate a unique SHA-256 for that project and write it into `module.json`.
+- Opening the project displays its generated SHA-256 in Project Settings.
+- Developers copy/paste the remaining keypair metadata needed to sign their modules.
 
 ### Fixed
 
-- Removed certification and signing fields from initial project creation.
-- New projects now always begin with `"certified": "No"` and blank `sha256`, `key_id`, and `public_key` values.
-- Creation requests can no longer inject certification or signing metadata.
-- Clarified that SHA-256 is derived from the generated RSA public key rather than invented for a draft module.
+- Removed certification, keypair, and passphrase inputs from initial project creation.
+- New projects begin with `"certified": "No"`, a server-generated SHA-256, and blank key ID and public-key values.
+- Creation requests cannot substitute caller-provided signing metadata for the server-generated project SHA-256.
+- Public-key input now accepts full PEM, base64-encoded PEM, or the base64 PEM body and normalizes it for `module.json`.
 
 ## 1.0.5 — 2026-08-30
 

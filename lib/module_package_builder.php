@@ -10,7 +10,7 @@ class module_package_builder
  public function listProjects():array{$out=[];foreach(glob($this->modules.'/*',GLOB_ONLYDIR)?:[]as$d){$s=basename($d);if($s===self::SELF||!$this->isValidSlug($s)||is_link($d))continue;$m=$this->json($d.'/module.json',false);$out[]=['slug'=>$s,'name'=>(string)($m['name']??$s),'version'=>(string)($m['version']??''),'description'=>(string)($m['description']??''),'update_url'=>(string)($m['update_url']??''),'creator'=>(string)($m['creator']??''),'domain'=>(string)($m['domain']??''),'certified'=>(string)($m['certified']??'No'),'signing'=>is_array($m['signing']??null)?$m['signing']:[]];}usort($out,fn($a,$b)=>strcmp($a['slug'],$b['slug']));return$out;}
  public function createProject(array $in):void
  {
-  $s=strtolower(trim((string)($in['slug']??'')));$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$in['certified']='No';$in['signing_sha256']='';$in['signing_key_id']='';$in['signing_public_key']='';$metadata=$this->projectMetadata($s,$n,$v,$in);if($s===self::SELF)throw new InvalidArgumentException('Reserved slug.');
+  $s=strtolower(trim((string)($in['slug']??'')));$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$in['certified']='No';$in['signing_sha256']=hash('sha256',random_bytes(32));$in['signing_key_id']='';$in['signing_public_key']='';$metadata=$this->projectMetadata($s,$n,$v,$in);if($s===self::SELF)throw new InvalidArgumentException('Reserved slug.');
   $r=$this->modules.'/'.$s;if(file_exists($r))throw new RuntimeException('Project exists.');foreach(['/controllers','/models','/views/admin','/docs']as$d)$this->mkdir($r.$d);
   $files=['controllers/'.$s.'.php','models/'.$s.'_model.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];$metadata['files']=$files;$metadata['routes']=['index'];
   try{$this->write($r.'/module.json',$this->encode($metadata));$this->write($r.'/controllers/'.$s.'.php',$this->controller($s));$this->write($r.'/models/'.$s.'_model.php',$this->model($s));$this->write($r.'/views/index.php',$this->publicView($n));$this->write($r.'/views/admin/'.$s.'.php',$this->adminView($n));$this->write($r.'/docs/CHANGELOG.md',$this->changelog($v));}catch(Throwable$e){$this->remove($r);throw$e;}
@@ -33,12 +33,11 @@ class module_package_builder
   if(isset($m['certified'])&&!in_array($m['certified'],['Yes','No'],true))$e[]='certified must be Yes or No.';
   $signing=$m['signing']??null;if(!is_array($signing))$e[]='signing metadata must be an object.';else{
    foreach(['sha256','key_id','public_key']as$f)if(!array_key_exists($f,$signing))$e[]='Missing signing metadata: '.$f;
-   $hasSigning=implode('',array_map('strval',$signing))!=='';
-   if(($m['certified']??'No')==='Yes'||$hasSigning){
-    if(!preg_match('/^[a-f0-9]{64}$/',(string)($signing['sha256']??'')))$e[]='signing.sha256 must be lowercase SHA-256.';
-    if(!preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/',(string)($signing['key_id']??'')))$e[]='signing.key_id is invalid.';
-    $pem=base64_decode((string)($signing['public_key']??''),true);if($pem===false||!str_contains($pem,'-----BEGIN PUBLIC KEY-----'))$e[]='signing.public_key must be base64 public PEM.';
-   }
+   $sha=(string)($signing['sha256']??'');$keyId=(string)($signing['key_id']??'');$publicKey=(string)($signing['public_key']??'');
+   if($sha!==''&&!preg_match('/^[a-f0-9]{64}$/',$sha))$e[]='signing.sha256 must be lowercase SHA-256.';
+   if($keyId!==''&&!preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/',$keyId))$e[]='signing.key_id is invalid.';
+   if($publicKey!==''){$pem=base64_decode($publicKey,true);if($pem===false||!str_contains($pem,'-----BEGIN PUBLIC KEY-----'))$e[]='signing.public_key must be base64 public PEM.';}
+   if(($m['certified']??'No')==='Yes'&&($sha===''||$keyId===''||$publicKey===''))$e[]='Certified modules require complete signing metadata.';
   }
   if(!is_file($c))$e[]='Required controller missing.';else{$x=(string)file_get_contents($c);if(!preg_match('/function\s+index\s*\(/',$x))$e[]='Controller index() missing.';if(!preg_match('/function\s+admin\s*\(/',$x))$e[]='Controller admin() missing.';}
   if(!is_file($v))$e[]='views/index.php missing.';else{$x=(string)file_get_contents($v);foreach(["APPROOT . '/views/inc/head.php'","APPROOT . '/views/inc/foot.php'"]as$w)if(!str_contains($x,$w))$e[]='Public wrapper missing: '.$w;}
@@ -267,7 +266,7 @@ class module_package_builder
   $certified=(string)($in['certified']??'No');
   $sha=strtolower(trim((string)($in['signing_sha256']??'')));
   $keyId=strtolower(trim((string)($in['signing_key_id']??'')));
-  $publicKey=preg_replace('/\s+/','',trim((string)($in['signing_public_key']??'')))??'';
+  $publicKey=$this->normalizePublicKey((string)($in['signing_public_key']??''));
 
   if($description===''||strlen($description)>500)throw new InvalidArgumentException('Description is required and must be 500 characters or fewer.');
   if(filter_var($updateUrl,FILTER_VALIDATE_URL)===false||strtolower((string)parse_url($updateUrl,PHP_URL_SCHEME))!=='https')throw new InvalidArgumentException('A valid HTTPS update URL is required.');
@@ -275,13 +274,10 @@ class module_package_builder
   if(!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/',$domain))throw new InvalidArgumentException('A valid domain name is required.');
   if(!in_array($certified,['Yes','No'],true))throw new InvalidArgumentException('Certified must be Yes or No.');
 
-  $hasSigning=$sha!==''||$keyId!==''||$publicKey!=='';
-  if($certified==='Yes'||$hasSigning){
-   if(!preg_match('/^[a-f0-9]{64}$/',$sha))throw new InvalidArgumentException('Signing SHA-256 must be 64 lowercase hexadecimal characters.');
-   if(!preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/',$keyId))throw new InvalidArgumentException('A lowercase signing key ID is required.');
-   $decoded=base64_decode($publicKey,true);
-   if($decoded===false||!str_contains($decoded,'-----BEGIN PUBLIC KEY-----')||!str_contains($decoded,'-----END PUBLIC KEY-----'))throw new InvalidArgumentException('Signing public key must be a base64-encoded public PEM.');
-  }
+  if($sha!==''&&!preg_match('/^[a-f0-9]{64}$/',$sha))throw new InvalidArgumentException('Signing SHA-256 must be 64 lowercase hexadecimal characters.');
+  if($keyId!==''&&!preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/',$keyId))throw new InvalidArgumentException('Signing key ID is invalid.');
+  if($publicKey!==''){$decoded=base64_decode($publicKey,true);if($decoded===false||!str_contains($decoded,'-----BEGIN PUBLIC KEY-----')||!str_contains($decoded,'-----END PUBLIC KEY-----'))throw new InvalidArgumentException('Signing public key must be a base64-encoded public PEM.');}
+  if($certified==='Yes'&&($sha===''||$keyId===''||$publicKey===''))throw new InvalidArgumentException('Certified modules require complete signing metadata.');
 
   return[
    'name'=>$n,
@@ -296,6 +292,13 @@ class module_package_builder
   ];
  }
  private function meta(string$s,string$n,string$v):void{if(!$this->isValidSlug($s))throw new InvalidArgumentException('Invalid lowercase slug.');if($n===''||strlen($n)>100)throw new InvalidArgumentException('Name required.');if(!preg_match('/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/',$v))throw new InvalidArgumentException('Semantic version required.');}
+ private function normalizePublicKey(string$value):string
+ {
+  $value=trim(str_replace(["\r\n","\r"],"\n",$value));if($value==='')return'';
+  if(str_contains($value,'-----BEGIN PUBLIC KEY-----'))$pem=$value."\n";
+  else{$compact=preg_replace('/\s+/','',$value)??'';$decoded=base64_decode($compact,true);if($decoded===false)throw new InvalidArgumentException('Signing public key must be PEM or base64 public-key data.');if(str_contains($decoded,'-----BEGIN PUBLIC KEY-----'))$pem=trim(str_replace(["\r\n","\r"],"\n",$decoded))."\n";else$pem="-----BEGIN PUBLIC KEY-----\n".chunk_split(base64_encode($decoded),64,"\n")."-----END PUBLIC KEY-----\n";}
+  $key=@openssl_pkey_get_public($pem);if($key===false)throw new InvalidArgumentException('Signing public key is not valid.');$details=openssl_pkey_get_details($key);$canonical=is_array($details)?($details['key']??null):null;if(!is_string($canonical)||!str_contains($canonical,'-----BEGIN PUBLIC KEY-----'))throw new InvalidArgumentException('Signing public key is not valid.');return base64_encode($canonical);
+ }
  private function artifactRoot(string$s,bool$create):string{$this->root($s);$r=$this->releases.'/'.$s;if($create)$this->mkdir($r);return$r;}
  private function json(string$p,bool$required=true):array{if(!is_file($p)||is_link($p)){if($required)throw new RuntimeException('JSON missing.');return[];}$x=file_get_contents($p);$d=is_string($x)?json_decode($x,true):null;if(!is_array($d)){if($required)throw new RuntimeException('JSON invalid.');return[];}return$d;}
  private function encode(array$d):string{$x=json_encode($d,JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES);if(!is_string($x))throw new RuntimeException('JSON encode failed.');return$x.PHP_EOL;}

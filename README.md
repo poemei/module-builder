@@ -117,10 +117,12 @@ Uncertified developers retain the ability to:
 - Generate their own RSA-SHA256 identity
 - Populate signing metadata when ready
 
-Initial project creation does not request certification or signing values. New
-projects are always created with `"certified": "No"` and blank `sha256`,
-`key_id`, and `public_key` values. After creation, the developer can generate
-an RSA-SHA256 identity and add its metadata from Project Settings. A release is produced through the
+Initial project creation does not ask developers for keypair data. When Create
+is clicked, the server generates a unique SHA-256 value for that project and
+writes it into `module.json`; the value appears in Project Settings when the
+project is opened. Developers use the standalone keypair generator and then
+copy/paste the key ID and public key needed for signing. The project remains
+`"certified": "No"` until that status is changed explicitly. A release is produced through the
 combined **Build & Sign Release** action after the developer supplies the
 module signing metadata, matching encrypted private PEM, and passphrase.
 

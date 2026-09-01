@@ -39,7 +39,6 @@ require APPROOT . '/views/inc/head.php';
    <label class="form-label">Update URL<input class="form-control" type="url" name="update_url" placeholder="https://example.com/updates/module.json" required></label>
    <label class="form-label">Creator<input class="form-control" name="creator" required maxlength="100"></label>
    <label class="form-label">Domain<input class="form-control" name="domain" placeholder="example.com" required></label>
-   <p class="small text-muted">Signing metadata starts blank. Create the project first, then generate or add its RSA-SHA256 identity from Project Settings.</p>
    <button class="btn btn-primary w-100">Create</button>
   </form></div>
  </aside><section class="col-xl-9"><?php if($current):?>
@@ -54,7 +53,7 @@ require APPROOT . '/views/inc/head.php';
    <div class="col-md-4"><label class="form-label">Certified<select class="form-select" name="certified"><option value="No" <?=$current['certified']==='No'?'selected':''?>>No</option><option value="Yes" <?=$current['certified']==='Yes'?'selected':''?>>Yes</option></select></label></div>
    <div class="col-12"><label class="form-label">Signing SHA-256<input class="form-control font-monospace" name="signing_sha256" value="<?=$e($current['signing']['sha256']??'')?>"></label></div>
    <div class="col-12"><label class="form-label">Signing key ID<input class="form-control font-monospace" name="signing_key_id" value="<?=$e($current['signing']['key_id']??'')?>"></label></div>
-   <div class="col-12"><label class="form-label">Base64 public PEM<textarea class="form-control font-monospace" name="signing_public_key" rows="5"><?=$e($current['signing']['public_key']??'')?></textarea></label></div>
+   <div class="col-12"><label class="form-label">Public key (PEM or base64)<textarea class="form-control font-monospace" name="signing_public_key" rows="5"><?=$e($current['signing']['public_key']??'')?></textarea></label></div>
    <div><button class="btn btn-outline-primary">Save metadata</button></div>
   </form></div>
   <div class="row g-4"><div class="col-lg-4"><div class="card h-100"><div class="card-header fw-bold">Files</div><div class="list-group list-group-flush overflow-auto" style="max-height:30rem"><?php foreach($tree as$f):?><?php if($f['directory']):?><span class="list-group-item">Directory: <?=$e($f['path'])?></span><?php else:?><a class="list-group-item list-group-item-action" href="/admin/module_builder?project=<?=rawurlencode($selected)?>&amp;path=<?=rawurlencode($f['path'])?>"><?=$e($f['path'])?></a><?php endif?><?php endforeach?></div><div class="card-body border-top"><form method="post" class="mb-2"><?=$csrf_field?><input type="hidden" name="project" value="<?=$e($selected)?>"><input type="hidden" name="action" value="create_file"><div class="input-group"><input class="form-control" name="path" placeholder="views/about.php"><button class="btn btn-outline-secondary">New file</button></div></form><form method="post"><?=$csrf_field?><input type="hidden" name="project" value="<?=$e($selected)?>"><input type="hidden" name="action" value="create_directory"><div class="input-group"><input class="form-control" name="path" placeholder="assets/css"><button class="btn btn-outline-secondary">New folder</button></div></form></div></div></div>

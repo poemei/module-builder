@@ -93,12 +93,12 @@ class module_builder extends controller
                 );
                 return 'Signed release built: ' . basename($artifact);
             case 'generate_keypair':
-                $this->downloadKeypair(
-                    $builder,
-                    $builder->generateSigningKeypair(
-                        (string) ($_POST['key_passphrase'] ?? ''),
-                        (string) ($_POST['key_id_prefix'] ?? 'developer')
-                    )
+                $keypair = $builder->generateSigningKeypair(
+                    (string) ($_POST['key_passphrase'] ?? ''),
+                    (string) ($_POST['key_id_prefix'] ?? 'developer')
+                );
+                $this->downloadKeypairZip(
+                    $builder->buildSigningKeypairZip($keypair)
                 );
         }
 
@@ -106,16 +106,13 @@ class module_builder extends controller
     }
 
     /**
-     * Download a newly generated keypair without persisting it.
+     * Download an already constructed keypair archive.
      *
      * @return never
      */
-    private function downloadKeypair(
-        module_package_builder $builder,
-        array $keypair
-    ): never {
+    private function downloadKeypairZip(string $zip): never
+    {
         $filename = 'chaos-rsa-signing-keypair-' . gmdate('Ymd-His') . '.zip';
-        $zip = $builder->buildSigningKeypairZip($keypair);
 
         header('Content-Type: application/zip');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
@@ -125,7 +122,6 @@ class module_builder extends controller
         header('X-Content-Type-Options: nosniff');
         echo $zip;
 
-        $keypair = [];
         $zip = null;
         exit;
     }

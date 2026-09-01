@@ -55,7 +55,11 @@ try {
     if (!in_array('index', $metadata['routes'], true)) $fail('index route missing');
     $expectedKeys = ['name','module','version','description','update_url','creator','domain','certified','signing','files','routes'];
     if (array_keys($metadata) !== $expectedKeys) $fail('module metadata shape or order invalid');
-    if ($metadata['certified'] !== 'No' || $metadata['signing'] !== ['sha256'=>'','key_id'=>'','public_key'=>'']) $fail('unsigned signing shape invalid');
+    if ($metadata['certified'] !== 'No'
+        || !preg_match('/^[a-f0-9]{64}$/', $metadata['signing']['sha256'] ?? '')
+        || ($metadata['signing']['key_id'] ?? null) !== ''
+        || ($metadata['signing']['public_key'] ?? null) !== '') $fail('server-generated project SHA-256 invalid');
+    $firstProjectSha = $metadata['signing']['sha256'];
     $builder->deleteProject('weather');
     $builder->createProject([
         'slug'=>'weather','name'=>'Weather','version'=>'1.0.0',
@@ -66,7 +70,14 @@ try {
         'signing_public_key'=>base64_encode("-----BEGIN PUBLIC KEY-----\ninvalid\n-----END PUBLIC KEY-----\n"),
     ]);
     $metadata = json_decode((string) file_get_contents($modules . '/weather/module.json'), true);
-    if ($metadata['certified'] !== 'No' || $metadata['signing'] !== ['sha256'=>'','key_id'=>'','public_key'=>'']) $fail('project creation accepted signing metadata');
+    if ($metadata['certified'] !== 'No'
+        || !preg_match('/^[a-f0-9]{64}$/', $metadata['signing']['sha256'] ?? '')
+        || $metadata['signing']['sha256'] === str_repeat('a',64)
+        || $metadata['signing']['sha256'] === $firstProjectSha
+        || ($metadata['signing']['key_id'] ?? null) !== ''
+        || ($metadata['signing']['public_key'] ?? null) !== '') $fail('project creation did not generate its own SHA-256');
+    $listedProject = array_values(array_filter($builder->listProjects(), static fn(array $project): bool => $project['slug'] === 'weather'))[0] ?? null;
+    if (($listedProject['signing']['sha256'] ?? '') !== $metadata['signing']['sha256']) $fail('generated SHA-256 is not available to Project Settings');
     if (!in_array('views/index.php', $metadata['files'], true)) $fail('index view manifest entry missing');
     if (!in_array('views/admin/weather.php', $metadata['files'], true) || !is_file($modules . '/weather/views/admin/weather.php')) $fail('slug admin view missing');
     if (!in_array('docs/CHANGELOG.md', $metadata['files'], true) || !is_file($modules . '/weather/docs/CHANGELOG.md')) $fail('generated changelog missing');
@@ -96,6 +107,18 @@ try {
     if (($pair['algorithm'] ?? '') !== 'RSA-SHA256' || ($pair['rsa_bits'] ?? 0) < 3072) $fail('RSA keypair shape invalid');
     if (!preg_match('/^[a-f0-9]{64}$/', $pair['sha256']) || !str_starts_with($pair['key_id'], 'testdev-')) $fail('module signing identity invalid');
     if (base64_decode($pair['public_key'], true) !== $pair['public_key_pem']) $fail('base64 public key invalid');
+
+    foreach ([$pair['public_key_pem'], preg_replace('/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\s+/', '', $pair['public_key_pem'])] as $publicKeyInput) {
+        $builder->editProject('weather', [
+            'name'=>'Weather Two','version'=>'1.0.1','description'=>'Edited weather module',
+            'update_url'=>'https://example.com/updates/weather.json',
+            'creator'=>'Test Developer','domain'=>'example.com','certified'=>'No',
+            'signing_sha256'=>$pair['sha256'],'signing_key_id'=>$pair['key_id'],
+            'signing_public_key'=>$publicKeyInput,
+        ]);
+        $normalizedMetadata = json_decode((string) file_get_contents($modules . '/weather/module.json'), true);
+        if (base64_decode($normalizedMetadata['signing']['public_key'], true) !== $pair['public_key_pem']) $fail('public-key input was not normalized to base64 PEM');
+    }
 
     $builder->editProject('weather', [
         'name'=>'Weather Two','version'=>'1.0.1','description'=>'Edited weather module',
