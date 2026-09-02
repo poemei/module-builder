@@ -2,21 +2,14 @@
 
 > **Build modules. Validate them. Package them. Ship them.**
 
-<<<<<<< HEAD
 **Module Builder 1.0.7** is the developer workspace for creating and packaging modules for ChAoS MVC.
-=======
-**Module Builder 1.0.6** is the developer workspace for creating and packaging modules for ChAoS MVC.
->>>>>>> 7dc5abd9ee720cad8c2b41799f07e245319daed0
 
 It provides a controlled development environment inside ChAoS MVC while keeping module development where it belongs: **outside the Core.**
 
 ---
 
-<<<<<<< HEAD
 ## ✦ Module Builder 1.0.7
-=======
-## ✦ Module Builder 1.0.6
->>>>>>> 7dc5abd9ee720cad8c2b41799f07e245319daed0
+
 
 Module Builder is an **admin-only development tool**.
 
@@ -341,10 +334,6 @@ Grow outward.
 
 ---
 
-<<<<<<< HEAD
-**ChAoS MVC Module Builder 1.1.0**
-=======
-**ChAoS MVC Module Builder 1.0.6**
->>>>>>> 7dc5abd9ee720cad8c2b41799f07e245319daed0
+**ChAoS MVC Module Builder 1.0.7**
 
 *Protect the Core. Grow outward.*
