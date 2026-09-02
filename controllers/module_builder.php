@@ -28,6 +28,19 @@ class module_builder extends controller
 
         $selected = trim((string) ($_REQUEST['project'] ?? ''));
         $selected = $builder->isValidSlug($selected) ? $selected : '';
+        $downloadArtifact = trim((string) ($_GET['download_artifact'] ?? ''));
+
+        if ($selected !== '' && $downloadArtifact !== '') {
+            try {
+                $this->downloadArtifact(
+                    $builder->artifactFile($selected, $downloadArtifact)
+                );
+            } catch (Throwable $exception) {
+                http_response_code(404);
+                $error = $exception->getMessage();
+            }
+        }
+
         $path = trim((string) ($_REQUEST['path'] ?? ''));
         $content = null;
 
@@ -93,12 +106,12 @@ class module_builder extends controller
                 );
                 return 'Signed release built: ' . basename($artifact);
             case 'generate_keypair':
-                $this->downloadKeypair(
-                    $builder,
-                    $builder->generateSigningKeypair(
-                        (string) ($_POST['key_passphrase'] ?? ''),
-                        (string) ($_POST['key_id_prefix'] ?? 'developer')
-                    )
+                $keypair = $builder->generateSigningKeypair(
+                    (string) ($_POST['key_passphrase'] ?? ''),
+                    (string) ($_POST['key_id_prefix'] ?? 'developer')
+                );
+                $this->downloadKeypairZip(
+                    $builder->buildSigningKeypairZip($keypair)
                 );
         }
 
@@ -106,16 +119,13 @@ class module_builder extends controller
     }
 
     /**
-     * Download a newly generated keypair without persisting it.
+     * Download an already constructed keypair archive.
      *
      * @return never
      */
-    private function downloadKeypair(
-        module_package_builder $builder,
-        array $keypair
-    ): never {
+    private function downloadKeypairZip(string $zip): never
+    {
         $filename = 'chaos-rsa-signing-keypair-' . gmdate('Ymd-His') . '.zip';
-        $zip = $builder->buildSigningKeypairZip($keypair);
 
         header('Content-Type: application/zip');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
@@ -125,8 +135,19 @@ class module_builder extends controller
         header('X-Content-Type-Options: nosniff');
         echo $zip;
 
-        $keypair = [];
         $zip = null;
+        exit;
+    }
+
+    private function downloadArtifact(string $file): never
+    {
+        $filename = basename($file);
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . (string) filesize($file));
+        header('Cache-Control: private, no-store');
+        header('X-Content-Type-Options: nosniff');
+        readfile($file);
         exit;
     }
 }

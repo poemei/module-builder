@@ -1,6 +1,53 @@
 # Changelog
 
+## 1.0.7 — 2026-09-02
+
+### Added
+
+- Optional **Uses Database** project-creation control, unchecked by default.
+- Configurable module-owned table list with module-slug ownership validation;
+  a blank list defaults to the module slug.
+- Database-backed modules include configured owned tables plus complete Install
+  SQL, Update SQL, unavailable, Delete Data, and Core-owned Nuke lifecycle.
+- Database-backed modules generate a model, `sql/schema.sql`, `sql/patches/`,
+  schema-version state, and `missing`, `current`, and `update` detection.
+- Database-backed manifests declare their owned tables and SQL files.
+- Typed OpenPGP fingerprint and public-key metadata support.
+- Canonical signing metadata shape using `type`, `fingerprint`, `sha256`,
+  `key_id`, and `public_key`.
+- Validation for generated lifecycle controls and database ownership.
+- Authenticated download links for every generated project artifact, with
+  project confinement, traversal rejection, and symbolic-link rejection.
+
+### Changed
+
+- SHA-256 identity is mandatory for every module manifest.
+- RSA key ID and Public PEM remain optional but must be supplied together.
+- Lightweight modules no longer receive unused models or SQL architecture.
+- Core-owned Nuke remains available for both generic and database-backed modules.
+- Generated database mutations use Admin authentication, POST, CSRF protection,
+  and explicit action allowlists.
+- Clarified that the release ZIP checksum is generated during build and written
+  beside the artifact; it is distinct from the manifest signing identity.
+
 All notable changes to ChAoS MVC Module Builder are documented here.
+
+## 1.0.6 — 2026-08-31
+
+### Changed
+
+- The standalone RSA-SHA256 keypair generator remains available at the top of Module Builder.
+- Initial project creation asks for no keypair, SHA-256, or passphrase data.
+- Clicking **Create** makes the server generate a unique SHA-256 for that project and write it into `module.json`.
+- Opening the project displays its generated SHA-256 in Project Settings.
+- Developers copy/paste the remaining keypair metadata needed to sign their modules.
+
+### Fixed
+
+- Removed certification, keypair, and passphrase inputs from initial project creation.
+- New projects begin with `"certified": "No"`, a server-generated SHA-256, and blank key ID and public-key values.
+- Creation requests cannot substitute caller-provided signing metadata for the server-generated project SHA-256.
+- Public-key input now accepts full PEM, base64-encoded PEM, or the base64 PEM body and normalizes it for `module.json`.
 
 ## 1.0.5 — 2026-08-30
 

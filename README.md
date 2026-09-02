@@ -2,13 +2,13 @@
 
 > **Build modules. Validate them. Package them. Ship them.**
 
-**Module Builder 1.0.5** is the developer workspace for creating and packaging modules for ChAoS MVC.
+**Module Builder 1.0.7** is the developer workspace for creating and packaging modules for ChAoS MVC.
 
 It provides a controlled development environment inside ChAoS MVC while keeping module development where it belongs: **outside the Core.**
 
 ---
 
-## ✦ Module Builder 1.0.5
+## ✦ Module Builder 1.0.7
 
 Module Builder is an **admin-only development tool**.
 
@@ -69,18 +69,119 @@ A project may contain its own:
 
 The live module directory is authoritative.
 
-Every generated `module.json` declares, in order: `name`, `module`,
-`version`, `description`, `update_url`, `creator`, `domain`,
-`certified`, `signing`, `files`, and `routes`. The `signing` object
-always contains `sha256`, `key_id`, and the base64-encoded
-`public_key`. Unsigned projects keep those three values empty and use
+Every generated `module.json` declares `name`, `module`, `version`,
+`description`, `update_url`, `creator`, `domain`, `certified`, `signing`,
+`files`, and `routes`. Database-backed projects additionally declare
+`database_tables`. The
+`signing` object uses the canonical `type`, `fingerprint`, `sha256`,
+`key_id`, and `public_key` shape. Every project receives a SHA-256 identity.
+Key ID and public key are optional, but must be supplied together. Projects use
 `"certified": "No"`.
 
-The required generated source shape includes `controllers/<slug>.php`,
-`models/<slug>_model.php`, `views/admin/<slug>.php`, and
-`views/index.php`, and `docs/CHANGELOG.md`; the public `index` route is declared explicitly. New projects initialize the changelog with the selected version and UTC creation date.
+The required lightweight source shape includes `controllers/<slug>.php`,
+`views/admin/<slug>.php`, `views/index.php`, and `docs/CHANGELOG.md`; the public
+`index` route is declared explicitly. When **Uses Database** is selected, the
+builder additionally creates the module model, `sql/schema.sql`, `sql/patches/`,
+owned-table declarations, and the explicit database lifecycle. New projects
+initialize the changelog with the selected version and UTC creation date.
 
 Module Builder does not maintain a second editable copy of the project inside `/releases`.
+
+---
+
+## ✦ Generic and Database-Backed Modules
+
+Database support is explicit and optional. The **Uses Database** option is
+unchecked by default when a project is created.
+
+### Generic module
+
+When **Uses Database** is unchecked, Module Builder creates a lightweight
+module without unused persistence architecture:
+
+```text
+<slug>/
+├── controllers/
+│   └── <slug>.php
+├── views/
+│   ├── index.php
+│   └── admin/
+│       └── <slug>.php
+├── docs/
+│   └── CHANGELOG.md
+└── module.json
+```
+
+A generic module does not receive:
+
+- a model;
+- `sql/schema.sql`;
+- `sql/patches/`;
+- `database_tables` metadata;
+- database-state detection;
+- Install SQL, Update SQL, or Delete Data actions.
+
+Core-owned Nuke remains available because module removal is independent of
+whether the module owns database tables.
+
+### Database-backed module
+
+When **Uses Database** is checked, the creation form accepts one or more
+module-owned table names. If the table list is blank, the first table defaults
+to the module slug.
+
+Valid ownership names are:
+
+```text
+<module_slug>
+<module_slug>_*
+```
+
+For example:
+
+```text
+letters
+letters_subscribers
+```
+
+The generated module includes:
+
+```text
+<slug>/
+├── controllers/
+│   └── <slug>.php
+├── models/
+│   └── <slug>_model.php
+├── views/
+│   ├── index.php
+│   └── admin/
+│       └── <slug>.php
+├── sql/
+│   ├── schema.sql
+│   └── patches/
+├── docs/
+│   └── CHANGELOG.md
+└── module.json
+```
+
+Its explicit lifecycle is:
+
+```text
+Missing schema → Admin Install SQL
+Missing schema → Public unavailable
+Pending patch → Admin Update SQL
+Current schema → Normal operation
+Delete Data → Records removed; tables and module preserved
+Nuke → Core verifies ownership and removes tables plus module
+```
+
+Install SQL, Update SQL, and Delete Data use authenticated Admin access, POST,
+CSRF protection, and an explicit action allowlist. Database changes are never
+triggered merely by loading a public or Admin page.
+
+The configured tables are written to `module.json` as `database_tables`. This
+is an ownership declaration used by Core during Nuke, so unrelated or external
+tables are rejected.
 
 ---
 
@@ -102,6 +203,9 @@ signature.sig
 ```
 
 Artifacts are generated distribution output and are separate from editable module source.
+Each generated artifact appears at the bottom of its project as an authenticated
+download link. Downloads are confined to that project's artifact directory and
+reject traversal and symbolic-link targets.
 
 ---
 
@@ -117,7 +221,14 @@ Uncertified developers retain the ability to:
 - Generate their own RSA-SHA256 identity
 - Populate signing metadata when ready
 
-New projects begin with blank signing values. A release is produced through the
+Initial project creation does not ask developers for keypair data. When Create
+is clicked, the server generates a unique SHA-256 value for that project and
+writes it into `module.json`; the value appears in Project Settings when the
+project is opened. Developers use the standalone keypair generator and then
+copy/paste the key ID and public key needed for signing. OpenPGP identity may
+instead be recorded with `type: openpgp`, its fingerprint, key ID, and compact
+base64 public key. The project remains
+`"certified": "No"` until that status is changed explicitly. A release is produced through the
 combined **Build & Sign Release** action after the developer supplies the
 module signing metadata, matching encrypted private PEM, and passphrase.
 
@@ -215,6 +326,6 @@ Grow outward.
 
 ---
 
-**ChAoS MVC Module Builder 1.0.5**
+**ChAoS MVC Module Builder 1.1.0**
 
 *Protect the Core. Grow outward.*
