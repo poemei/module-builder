@@ -28,6 +28,19 @@ class module_builder extends controller
 
         $selected = trim((string) ($_REQUEST['project'] ?? ''));
         $selected = $builder->isValidSlug($selected) ? $selected : '';
+        $downloadArtifact = trim((string) ($_GET['download_artifact'] ?? ''));
+
+        if ($selected !== '' && $downloadArtifact !== '') {
+            try {
+                $this->downloadArtifact(
+                    $builder->artifactFile($selected, $downloadArtifact)
+                );
+            } catch (Throwable $exception) {
+                http_response_code(404);
+                $error = $exception->getMessage();
+            }
+        }
+
         $path = trim((string) ($_REQUEST['path'] ?? ''));
         $content = null;
 
@@ -123,6 +136,18 @@ class module_builder extends controller
         echo $zip;
 
         $zip = null;
+        exit;
+    }
+
+    private function downloadArtifact(string $file): never
+    {
+        $filename = basename($file);
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . (string) filesize($file));
+        header('Cache-Control: private, no-store');
+        header('X-Content-Type-Options: nosniff');
+        readfile($file);
         exit;
     }
 }

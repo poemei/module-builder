@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.1.0 — 2026-09-02
+
+### Added
+
+- Optional **Uses Database** project-creation control, unchecked by default.
+- Configurable module-owned table list with module-slug ownership validation;
+  a blank list defaults to the module slug.
+- Database-backed modules include configured owned tables plus complete Install
+  SQL, Update SQL, unavailable, Delete Data, and Core-owned Nuke lifecycle.
+- Database-backed modules generate a model, `sql/schema.sql`, `sql/patches/`,
+  schema-version state, and `missing`, `current`, and `update` detection.
+- Database-backed manifests declare their owned tables and SQL files.
+- Typed OpenPGP fingerprint and public-key metadata support.
+- Canonical signing metadata shape using `type`, `fingerprint`, `sha256`,
+  `key_id`, and `public_key`.
+- Validation for generated lifecycle controls and database ownership.
+- Authenticated download links for every generated project artifact, with
+  project confinement, traversal rejection, and symbolic-link rejection.
+
+### Changed
+
+- SHA-256 identity is mandatory for every module manifest.
+- RSA key ID and Public PEM remain optional but must be supplied together.
+- Lightweight modules no longer receive unused models or SQL architecture.
+- Core-owned Nuke remains available for both generic and database-backed modules.
+- Generated database mutations use Admin authentication, POST, CSRF protection,
+  and explicit action allowlists.
+- Clarified that the release ZIP checksum is generated during build and written
+  beside the artifact; it is distinct from the manifest signing identity.
+
 All notable changes to ChAoS MVC Module Builder are documented here.
 
 ## 1.0.6 — 2026-08-31
