@@ -13,7 +13,11 @@ $hasSigning=$current!==null
 require APPROOT . '/views/inc/head.php';
 ?>
 <main class="container-fluid py-4">
+<<<<<<< HEAD
  <div class="d-flex justify-content-between mb-4"><div><h1>Module Builder <small class="text-muted">1.1.0</small></h1><p>Live source: <code>user/modules/&lt;slug&gt;/</code>. Output: root <code>/releases</code>.</p></div><span class="badge <?= $certification['signing']?'bg-success':'bg-secondary' ?> p-2 align-self-start"><?= $certification['signing']?'Certified signing':'Unsigned development' ?></span></div>
+=======
+ <div class="d-flex justify-content-between mb-4"><div><h1>Module Builder <small class="text-muted">1.0.6</small></h1><p>Live source: <code>user/modules/&lt;slug&gt;/</code>. Output: root <code>/releases</code>.</p></div><span class="badge <?= $certification['signing']?'bg-success':'bg-secondary' ?> p-2 align-self-start"><?= $certification['signing']?'Certified signing':'Unsigned development' ?></span></div>
+>>>>>>> 7dc5abd9ee720cad8c2b41799f07e245319daed0
  <?php if($message):?><div class="alert alert-success"><?=$e($message)?></div><?php endif?><?php if($error):?><div class="alert alert-danger"><?=$e($error)?></div><?php endif?>
  <div class="alert alert-light border"><strong>Certification:</strong> <?=$e($certification['message'])?></div>
  <section class="card mb-4">
@@ -40,8 +44,12 @@ require APPROOT . '/views/inc/head.php';
    <label class="form-label">Update URL<input class="form-control" type="url" name="update_url" placeholder="https://example.com/updates/module.json" required></label>
    <label class="form-label">Creator<input class="form-control" name="creator" required maxlength="100"></label>
    <label class="form-label">Domain<input class="form-control" name="domain" placeholder="example.com" required></label>
+<<<<<<< HEAD
    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="uses-database" name="uses_database" value="1" onchange="document.getElementById('database-tables-wrap').hidden=!this.checked"><label class="form-check-label" for="uses-database">Uses Database</label></div>
    <div id="database-tables-wrap" hidden><label class="form-label">Database Tables<textarea class="form-control font-monospace" name="database_tables" rows="3" placeholder="module_slug&#10;module_slug_records"></textarea></label><div class="form-text">One table per line. Names must be the module slug or begin with <code>module_slug_</code>.</div></div>
+=======
+   <p class="small text-muted">Signing metadata starts blank. Create the project first, then generate or add its RSA-SHA256 identity from Project Settings.</p>
+>>>>>>> 7dc5abd9ee720cad8c2b41799f07e245319daed0
    <button class="btn btn-primary w-100">Create</button>
   </form></div>
  </aside><section class="col-xl-9"><?php if($current):?>

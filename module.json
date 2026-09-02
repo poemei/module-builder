@@ -1,7 +1,11 @@
 {
     "module": "module_builder",
     "name": "Module Builder",
+<<<<<<< HEAD
     "version": "1.0.7",
+=======
+    "version": "1.0.6",
+>>>>>>> 7dc5abd9ee720cad8c2b41799f07e245319daed0
     "description": "Admin-only ChAoS MVC module workspace.",
 	"domain": "www.poemei.com",
 	"creator": "PM",

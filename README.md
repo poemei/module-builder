@@ -2,13 +2,21 @@
 
 > **Build modules. Validate them. Package them. Ship them.**
 
+<<<<<<< HEAD
 **Module Builder 1.0.7** is the developer workspace for creating and packaging modules for ChAoS MVC.
+=======
+**Module Builder 1.0.6** is the developer workspace for creating and packaging modules for ChAoS MVC.
+>>>>>>> 7dc5abd9ee720cad8c2b41799f07e245319daed0
 
 It provides a controlled development environment inside ChAoS MVC while keeping module development where it belongs: **outside the Core.**
 
 ---
 
+<<<<<<< HEAD
 ## ✦ Module Builder 1.0.7
+=======
+## ✦ Module Builder 1.0.6
+>>>>>>> 7dc5abd9ee720cad8c2b41799f07e245319daed0
 
 Module Builder is an **admin-only development tool**.
 
@@ -221,6 +229,7 @@ Uncertified developers retain the ability to:
 - Generate their own RSA-SHA256 identity
 - Populate signing metadata when ready
 
+<<<<<<< HEAD
 Initial project creation does not ask developers for keypair data. When Create
 is clicked, the server generates a unique SHA-256 value for that project and
 writes it into `module.json`; the value appears in Project Settings when the
@@ -229,6 +238,12 @@ copy/paste the key ID and public key needed for signing. OpenPGP identity may
 instead be recorded with `type: openpgp`, its fingerprint, key ID, and compact
 base64 public key. The project remains
 `"certified": "No"` until that status is changed explicitly. A release is produced through the
+=======
+Initial project creation does not request certification or signing values. New
+projects are always created with `"certified": "No"` and blank `sha256`,
+`key_id`, and `public_key` values. After creation, the developer can generate
+an RSA-SHA256 identity and add its metadata from Project Settings. A release is produced through the
+>>>>>>> 7dc5abd9ee720cad8c2b41799f07e245319daed0
 combined **Build & Sign Release** action after the developer supplies the
 module signing metadata, matching encrypted private PEM, and passphrase.
 
@@ -326,6 +341,10 @@ Grow outward.
 
 ---
 
+<<<<<<< HEAD
 **ChAoS MVC Module Builder 1.1.0**
+=======
+**ChAoS MVC Module Builder 1.0.6**
+>>>>>>> 7dc5abd9ee720cad8c2b41799f07e245319daed0
 
 *Protect the Core. Grow outward.*
