@@ -326,6 +326,6 @@ Grow outward.
 
 ---
 
-**ChAoS MVC Module Builder 1.1.0**
+**ChAoS MVC Module Builder 1.0.7**
 
 *Protect the Core. Grow outward.*

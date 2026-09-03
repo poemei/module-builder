@@ -13,8 +13,8 @@ class module_package_builder
   $s=strtolower(trim((string)($in['slug']??'')));$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$in['certified']='No';$in['signing_sha256']=hash('sha256',random_bytes(32));$in['signing_key_id']='';$in['signing_public_key']='';$metadata=$this->projectMetadata($s,$n,$v,$in);if($s===self::SELF)throw new InvalidArgumentException('Reserved slug.');
   $usesDatabase=isset($in['uses_database']);$tableInput=trim((string)($in['database_tables']??''));$tables=$usesDatabase?$this->databaseTables($s,$tableInput===''?$s:$tableInput):[];
   $r=$this->modules.'/'.$s;if(file_exists($r))throw new RuntimeException('Project exists.');$directories=['/controllers','/views/admin','/docs'];if($usesDatabase)$directories=array_merge($directories,['/models','/sql','/sql/patches']);foreach($directories as$d)$this->mkdir($r.$d);
-  $files=['controllers/'.$s.'.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];if($usesDatabase)$files=array_merge(['controllers/'.$s.'.php','models/'.$s.'_model.php','views/admin/'.$s.'.php','views/index.php','sql/schema.sql','docs/CHANGELOG.md']);if($usesDatabase)$metadata['database_tables']=$tables;$metadata['files']=$files;$metadata['routes']=['index'];
-  try{$this->write($r.'/module.json',$this->encode($metadata));$this->write($r.'/controllers/'.$s.'.php',$this->controller($s,$usesDatabase));if($usesDatabase){$this->write($r.'/models/'.$s.'_model.php',$this->model($s,$tables,$v));$this->write($r.'/sql/schema.sql',$this->schema($tables,$v));}$this->write($r.'/views/index.php',$this->publicView($n));$this->write($r.'/views/admin/'.$s.'.php',$this->adminView($n,$s,$usesDatabase));$this->write($r.'/docs/CHANGELOG.md',$this->changelog($v));}catch(Throwable$e){$this->remove($r);throw$e;}
+  $files=['controllers/'.$s.'.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];if($usesDatabase)$files=['controllers/'.$s.'.php','models/'.$s.'_model.php','views/admin/'.$s.'.php','views/index.php','sql/schema.sql','sql/patches/.gitkeep','docs/CHANGELOG.md'];if($usesDatabase)$metadata['database_tables']=$tables;$metadata['files']=$files;$metadata['routes']=['index'];
+  try{$this->write($r.'/module.json',$this->encode($metadata));$this->write($r.'/controllers/'.$s.'.php',$this->controller($s,$usesDatabase));if($usesDatabase){$this->write($r.'/models/'.$s.'_model.php',$this->model($s,$tables,$v));$this->write($r.'/sql/schema.sql',$this->schema($tables,$v));$this->write($r.'/sql/patches/.gitkeep','');}$this->write($r.'/views/index.php',$this->publicView($n));$this->write($r.'/views/admin/'.$s.'.php',$this->adminView($n,$s,$usesDatabase));$this->write($r.'/docs/CHANGELOG.md',$this->changelog($v));}catch(Throwable$e){$this->remove($r);throw$e;}
  }
  public function editProject(string$s,array$in):void{$r=$this->root($s);$m=$this->json($r.'/module.json');$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$updated=$this->projectMetadata($s,$n,$v,$in);if(array_key_exists('database_tables',$m))$updated['database_tables']=$m['database_tables'];$updated['files']=$m['files']??['controllers/'.$s.'.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];$updated['routes']=$m['routes']??['index'];$this->write($r.'/module.json',$this->encode($updated));}
  public function deleteProject(string$s):void{$this->remove($this->root($s));}
@@ -46,11 +46,11 @@ class module_package_builder
    if(($m['certified']??'No')==='Yes'&&($sha===''||$keyId===''||$publicKey===''))$e[]='Certified modules require complete signing metadata.';
   }
   if(!is_file($c))$e[]='Required controller missing.';else{$x=(string)file_get_contents($c);if(!preg_match('/function\s+index\s*\(/',$x))$e[]='Controller index() missing.';if(!preg_match('/function\s+admin\s*\(/',$x))$e[]='Controller admin() missing.';if($usesDatabase)foreach(['install_sql','update_sql','delete_data','require_csrf']as$required)if(!str_contains($x,$required))$e[]='Controller lifecycle missing: '.$required.'.';}
-  if(!is_file($v))$e[]='views/index.php missing.';else{$x=(string)file_get_contents($v);foreach(["APPROOT . '/views/inc/head.php'","APPROOT . '/views/inc/foot.php'"]as$w)if(!str_contains($x,$w))$e[]='Public wrapper missing: '.$w;}
+  if(!is_file($v))$e[]='views/index.php missing.';else{$x=(string)file_get_contents($v);foreach(["theme::render('head'","theme::render('foot'"]as$w)if(!str_contains($x,$w))$e[]='Theme integration missing: '.$w;}
   if(!is_file($r.'/'.$admin))$e[]=$admin.' missing.';
   if(!is_array($m['routes']??null)||!in_array('index',$m['routes'],true))$e[]='routes[] must include index.';
   foreach(['controllers/'.$s.'.php',$admin,'views/index.php','docs/CHANGELOG.md']as$f)if(!is_array($m['files']??null)||!in_array($f,$m['files'],true))$e[]='files must include '.$f.'.';
-  if($usesDatabase){$tables=$m['database_tables'];if(!is_array($tables)||$tables===[])$e[]='database_tables must declare at least one owned table.';else foreach($tables as$table)if(!is_string($table)||($table!==$s&&!str_starts_with($table,$s.'_'))||!preg_match('/^[a-z][a-z0-9_]{1,62}$/',$table))$e[]='Invalid module-owned database table: '.(string)$table.'.';foreach(['models/'.$s.'_model.php','sql/schema.sql']as$f)if(!is_array($m['files']??null)||!in_array($f,$m['files'],true))$e[]='files must include '.$f.'.';if(!is_file($r.'/sql/schema.sql'))$e[]='sql/schema.sql missing.';if(!is_dir($r.'/sql/patches'))$e[]='sql/patches directory missing.';}
+  if($usesDatabase){$tables=$m['database_tables'];if(!is_array($tables)||$tables===[])$e[]='database_tables must declare at least one owned table.';else foreach($tables as$table)if(!is_string($table)||($table!==$s&&!str_starts_with($table,$s.'_'))||!preg_match('/^[a-z][a-z0-9_]{1,62}$/',$table))$e[]='Invalid module-owned database table: '.(string)$table.'.';foreach(['models/'.$s.'_model.php','sql/schema.sql','sql/patches/.gitkeep']as$f)if(!is_array($m['files']??null)||!in_array($f,$m['files'],true))$e[]='files must include '.$f.'.';if(!is_file($r.'/sql/schema.sql'))$e[]='sql/schema.sql missing.';if(!is_file($r.'/sql/patches/.gitkeep'))$e[]='sql/patches/.gitkeep missing.';}
   if(is_file($r.'/'.$admin)&&!str_contains((string)file_get_contents($r.'/'.$admin),'/admin/uninstall'))$e[]='Admin Core Nuke control missing.';
   if(!is_file($r.'/docs/CHANGELOG.md'))$e[]='docs/CHANGELOG.md missing.';
   return['valid'=>$e===[],'errors'=>$e];
@@ -345,21 +345,309 @@ class module_package_builder
  private function https(string$u):bool{$p=parse_url($u);if(!is_array($p)||strtolower((string)($p['scheme']??''))!=='https'||empty($p['host'])||isset($p['user'])||isset($p['pass']))return false;$h=strtolower((string)$p['host']);if($h==='localhost'||str_ends_with($h,'.local'))return false;$ip=filter_var($h,FILTER_VALIDATE_IP);return$ip===false||filter_var($ip,FILTER_VALIDATE_IP,FILTER_FLAG_NO_PRIV_RANGE|FILTER_FLAG_NO_RES_RANGE)!==false;}
  private function controller(string$s,bool$db):string
  {
-  if(!$db)return"<?php\ndeclare(strict_types=1);\n/* [AI:GPT-5.6 Sol | ".gmdate('Y-m-d H:i:s')." UTC] */\nfinal class {$s} extends controller\n{\n public function index(array \$params=[]):void{\$this->view('index',['params'=>\$params]);}\n public function admin(array \$params=[]):void{\$this->require_admin(7);\$this->view('admin/{$s}',['params'=>\$params]);}\n}\n/* [End AI:GPT-5.6 Sol] */\n";
-  return"<?php\ndeclare(strict_types=1);\n/* [AI:GPT-5.6 Sol | ".gmdate('Y-m-d H:i:s')." UTC] */\nfinal class {$s} extends controller\n{\n private const ADMIN_ACTIONS=['install_sql','update_sql','delete_data'];\n public function index(array \$params=[]):void{\$model=\$this->model('{$s}_model');if(\$model->databaseState()!=='current'){http_response_code(503);\$this->error_page('This module is temporarily unavailable.');}\$this->view('index',['params'=>\$params]);}\n public function admin(array \$params=[]):void{\$this->require_admin(7);\$model=\$this->model('{$s}_model');\$state=\$model->databaseState();if((\$_SERVER['REQUEST_METHOD']??'GET')==='POST'){\$this->require_csrf();\$action=(string)(\$_POST['action']??'');if(!in_array(\$action,self::ADMIN_ACTIONS,true)){http_response_code(400);\$this->error_page('Invalid module action.');}if(\$action==='install_sql'){if(\$state!=='missing')\$this->error_page('Schema is already installed.');\$model->installSchema();header('Location: /admin/{$s}?installed=1');exit;}if(\$action==='update_sql'){if(\$state!=='update')\$this->error_page('No schema update is pending.');\$model->updateSchema();header('Location: /admin/{$s}?updated=1');exit;}if(\$state!=='current')\$this->error_page('Complete the database lifecycle action first.');if(\$action==='delete_data'){\$model->deleteData();header('Location: /admin/{$s}?deleted_data=1');exit;}}\$this->view('admin/{$s}',['database_state'=>\$state,'installed'=>isset(\$_GET['installed']),'updated'=>isset(\$_GET['updated']),'deleted_data'=>isset(\$_GET['deleted_data'])]);}\n}\n/* [End AI:GPT-5.6 Sol] */\n";
+  $template=$db?<<<'PHP'
+<?php
+declare(strict_types=1);
+
+/* [AI:GPT-5.6 Sol | {{TIME}} UTC] */
+final class {{SLUG}} extends controller
+{
+    private const ADMIN_ACTIONS = [
+        'install_sql',
+        'update_sql',
+        'delete_data',
+    ];
+
+    public function index(array $params = []): void
+    {
+        $model = $this->model('{{SLUG}}_model');
+
+        if ($model->databaseState() !== 'current') {
+            http_response_code(503);
+            $this->error_page('This module is temporarily unavailable.');
+        }
+
+        $this->view('index', ['params' => $params]);
+    }
+
+    public function admin(array $params = []): void
+    {
+        $this->require_admin(7);
+        $model = $this->model('{{SLUG}}_model');
+        $state = $model->databaseState();
+
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+            $this->require_csrf();
+            $action = (string) ($_POST['action'] ?? '');
+
+            if (!in_array($action, self::ADMIN_ACTIONS, true)) {
+                http_response_code(400);
+                $this->error_page('Invalid module action.');
+            }
+
+            if ($action === 'install_sql') {
+                if ($state !== 'missing') {
+                    $this->error_page('Schema is already installed.');
+                }
+                $model->installSchema();
+                header('Location: /admin/{{SLUG}}?installed=1');
+                exit;
+            }
+
+            if ($action === 'update_sql') {
+                if ($state !== 'update') {
+                    $this->error_page('No schema update is pending.');
+                }
+                $model->updateSchema();
+                header('Location: /admin/{{SLUG}}?updated=1');
+                exit;
+            }
+
+            if ($state !== 'current') {
+                $this->error_page('Complete the database lifecycle action first.');
+            }
+
+            if ($action === 'delete_data') {
+                $model->deleteData();
+                header('Location: /admin/{{SLUG}}?deleted_data=1');
+                exit;
+            }
+        }
+
+        $this->view('admin/{{SLUG}}', [
+            'database_state' => $state,
+            'installed' => isset($_GET['installed']),
+            'updated' => isset($_GET['updated']),
+            'deleted_data' => isset($_GET['deleted_data']),
+        ]);
+    }
+}
+/* [End AI:GPT-5.6 Sol] */
+PHP
+:<<<'PHP'
+<?php
+declare(strict_types=1);
+
+/* [AI:GPT-5.6 Sol | {{TIME}} UTC] */
+final class {{SLUG}} extends controller
+{
+    public function index(array $params = []): void
+    {
+        $this->view('index', ['params' => $params]);
+    }
+
+    public function admin(array $params = []): void
+    {
+        $this->require_admin(7);
+        $this->view('admin/{{SLUG}}', ['params' => $params]);
+    }
+}
+/* [End AI:GPT-5.6 Sol] */
+PHP;
+  return str_replace(['{{SLUG}}','{{TIME}}'],[$s,gmdate('Y-m-d H:i:s')],$template)."\n";
  }
  private function model(string$s,array$tables,string$v):string
  {
-  $tableExport=var_export(array_values($tables),true);$stateTable=$tables[0];$deletes='';foreach(array_reverse($tables)as$table)$deletes.=$table===$stateTable?"\$this->query('DELETE FROM `{$table}` WHERE `id` <> 1');":"\$this->query('DELETE FROM `{$table}`');";
-  return"<?php\ndeclare(strict_types=1);\n/* [AI:GPT-5.6 Sol | ".gmdate('Y-m-d H:i:s')." UTC] */\nfinal class {$s}_model extends model\n{\n private const TABLES={$tableExport};\n private const STATE_TABLE='{$stateTable}';\n public function databaseState():string{foreach(self::TABLES as \$table)if(!\$this->tableExists(\$table))return'missing';return \$this->pendingPatch()!==null?'update':'current';}\n public function installSchema():void{\$this->executeSqlFile(__DIR__.'/../sql/schema.sql');}\n public function updateSchema():void{\$patch=\$this->pendingPatch();if(\$patch===null)throw new RuntimeException('No schema update is pending.');\$this->executeSqlFile(\$patch);\$this->query('UPDATE `'.self::STATE_TABLE.'` SET `schema_version` = :version WHERE `id` = 1',['version'=>\$this->targetVersion()]);}\n public function deleteData():void{{$deletes}}\n private function pendingPatch():?string{\$row=\$this->fetch('SELECT `schema_version` FROM `'.self::STATE_TABLE.'` WHERE `id` = 1 LIMIT 1');\$current=(string)(\$row['schema_version']??'');\$target=\$this->targetVersion();if(\$current===''||\$current===\$target)return null;\$file=__DIR__.'/../sql/patches/'.\$current.'-to-'.\$target.'.sql';return is_file(\$file)?\$file:null;}\n private function targetVersion():string{\$raw=file_get_contents(__DIR__.'/../module.json');\$metadata=is_string(\$raw)?json_decode(\$raw,true):null;return is_array(\$metadata)?(string)(\$metadata['version']??''):'';}\n private function executeSqlFile(string \$file):void{\$sql=is_file(\$file)?file_get_contents(\$file):false;if(!is_string(\$sql)||trim(\$sql)==='')throw new RuntimeException('SQL file could not be read.');\$statements=preg_split('/;\\s*(?:\\r?\\n|\$)/',\$sql);if(!is_array(\$statements))throw new RuntimeException('SQL file could not be parsed.');foreach(\$statements as \$statement){\$statement=trim(\$statement);if(\$statement!=='')\$this->query(\$statement);}}\n private function tableExists(string \$table):bool{return(bool)\$this->fetch('SELECT 1 FROM information_schema.tables WHERE table_schema = :schema AND table_name = :table_name LIMIT 1',['schema'=>DB_NAME,'table_name'=>\$table]);}\n}\n/* [End AI:GPT-5.6 Sol] */\n";
+  $tableLines=implode(",\n",array_map(static fn(string$table):string=>"        '{$table}'",$tables));
+  $stateTable=$tables[0];$deletes=[];foreach(array_reverse($tables)as$table)$deletes[]=$table===$stateTable?"        \$this->query('DELETE FROM `{$table}` WHERE `id` <> 1');":"        \$this->query('DELETE FROM `{$table}`');";
+  $template=<<<'PHP'
+<?php
+declare(strict_types=1);
+
+/* [AI:GPT-5.6 Sol | {{TIME}} UTC] */
+final class {{SLUG}}_model extends model
+{
+    private const TABLES = [
+{{TABLES}},
+    ];
+    private const STATE_TABLE = '{{STATE_TABLE}}';
+
+    public function databaseState(): string
+    {
+        foreach (self::TABLES as $table) {
+            if (!$this->tableExists($table)) {
+                return 'missing';
+            }
+        }
+
+        $current = $this->schemaVersion();
+        $target = $this->targetVersion();
+
+        if ($current === null || $target === '') {
+            return 'invalid';
+        }
+        if ($current === $target) {
+            return 'current';
+        }
+
+        return $this->patchFile($current, $target) !== null
+            ? 'update'
+            : 'invalid';
+    }
+
+    public function installSchema(): void
+    {
+        $this->executeSqlFile(__DIR__ . '/../sql/schema.sql');
+    }
+
+    public function updateSchema(): void
+    {
+        $current = $this->schemaVersion();
+        $target = $this->targetVersion();
+        $patch = $current === null ? null : $this->patchFile($current, $target);
+
+        if ($patch === null) {
+            throw new RuntimeException('No valid schema migration path exists.');
+        }
+
+        $this->executeSqlFile($patch);
+        $this->query(
+            'UPDATE `' . self::STATE_TABLE . '` SET `schema_version` = :version WHERE `id` = 1',
+            ['version' => $target]
+        );
+    }
+
+    public function deleteData(): void
+    {
+{{DELETES}}
+    }
+
+    private function schemaVersion(): ?string
+    {
+        $row = $this->fetch(
+            'SELECT `schema_version` FROM `' . self::STATE_TABLE . '` WHERE `id` = 1 LIMIT 1'
+        );
+        $version = is_array($row) ? trim((string) ($row['schema_version'] ?? '')) : '';
+
+        return preg_match('/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/', $version) === 1
+            ? $version
+            : null;
+    }
+
+    private function targetVersion(): string
+    {
+        $raw = file_get_contents(__DIR__ . '/../module.json');
+        $metadata = is_string($raw) ? json_decode($raw, true) : null;
+        $version = is_array($metadata) ? trim((string) ($metadata['version'] ?? '')) : '';
+
+        return preg_match('/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/', $version) === 1
+            ? $version
+            : '';
+    }
+
+    private function patchFile(string $current, string $target): ?string
+    {
+        $file = __DIR__ . '/../sql/patches/' . $current . '-to-' . $target . '.sql';
+        return is_file($file) && !is_link($file) ? $file : null;
+    }
+
+    private function executeSqlFile(string $file): void
+    {
+        $sql = is_file($file) ? file_get_contents($file) : false;
+        if (!is_string($sql) || trim($sql) === '') {
+            throw new RuntimeException('SQL file could not be read.');
+        }
+        $statements = preg_split('/;\s*(?:\r?\n|$)/', $sql);
+        if (!is_array($statements)) {
+            throw new RuntimeException('SQL file could not be parsed.');
+        }
+        foreach ($statements as $statement) {
+            $statement = trim($statement);
+            if ($statement !== '') {
+                $this->query($statement);
+            }
+        }
+    }
+
+    private function tableExists(string $table): bool
+    {
+        return (bool) $this->fetch(
+            'SELECT 1 FROM information_schema.tables '
+            . 'WHERE table_schema = :schema AND table_name = :table_name LIMIT 1',
+            ['schema' => DB_NAME, 'table_name' => $table]
+        );
+    }
+}
+/* [End AI:GPT-5.6 Sol] */
+PHP;
+  return str_replace(['{{SLUG}}','{{TIME}}','{{TABLES}}','{{STATE_TABLE}}','{{DELETES}}'],[$s,gmdate('Y-m-d H:i:s'),$tableLines,$stateTable,implode("\n",$deletes)],$template)."\n";
  }
- private function publicView(string$n):string{$n=htmlspecialchars($n,ENT_QUOTES,'UTF-8');return"<?php require APPROOT . '/views/inc/head.php'; ?>\n<?php /* [AI:GPT-5.6 Sol | ".gmdate('Y-m-d H:i:s')." UTC] */ ?>\n<main class=\"container py-5\"><h1>{$n}</h1></main>\n<?php /* [End AI:GPT-5.6 Sol] */ ?>\n<?php require APPROOT . '/views/inc/foot.php'; ?>\n";}
+ private function publicView(string$n):string
+ {
+  $n=htmlspecialchars($n,ENT_QUOTES,'UTF-8');$template=<<<'PHP'
+<?php
+/* [AI:GPT-5.6 Sol | {{TIME}} UTC] */
+if (!theme::render('head', get_defined_vars())) {
+    require APPROOT . '/views/inc/head.php';
+}
+?>
+<main class="container py-5">
+    <h1>{{NAME}}</h1>
+</main>
+<?php
+if (!theme::render('foot', get_defined_vars())) {
+    require APPROOT . '/views/inc/foot.php';
+}
+/* [End AI:GPT-5.6 Sol] */
+PHP;
+  return str_replace(['{{NAME}}','{{TIME}}'],[$n,gmdate('Y-m-d H:i:s')],$template)."\n";
+ }
 
  private function changelog(string$v):string
  {
   return "# Changelog\n\n## {$v} — ".gmdate('Y-m-d')."\n\n### Added\n\n- Initial module implementation.\n";
  }
  private function schema(array$tables,string$v):string{$sql='';foreach($tables as$i=>$table){$sql.="CREATE TABLE IF NOT EXISTS `{$table}` (\n `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,\n".($i===0?" `schema_version` VARCHAR(64) NULL,\n":'')." `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n PRIMARY KEY (`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;\n\n";}return$sql."INSERT INTO `{$tables[0]}` (`id`, `schema_version`) VALUES (1, '{$v}') ON DUPLICATE KEY UPDATE `schema_version` = VALUES(`schema_version`);\n";}
- private function adminView(string$n,string$s,bool$db):string{$n=htmlspecialchars($n,ENT_QUOTES,'UTF-8');if(!$db)return"<?php /* [AI:GPT-5.6 Sol | ".gmdate('Y-m-d H:i:s')." UTC] */ ?>\n<section class=\"container-fluid py-4\"><h1>{$n}</h1><p>Module administration.</p><form method=\"post\" action=\"/admin/uninstall\"><?=\$this->csrf_field()?><input type=\"hidden\" name=\"module\" value=\"{$s}\"><button type=\"submit\">Nuke</button></form></section>\n<?php /* [End AI:GPT-5.6 Sol] */ ?>\n";return"<?php /* [AI:GPT-5.6 Sol | ".gmdate('Y-m-d H:i:s')." UTC] */ ?>\n<section class=\"container-fluid py-4\"><h1>{$n}</h1><?php \$state=(string)(\$data['database_state']??'missing');if(\$state==='missing'):?><form method=\"post\" action=\"/admin/{$s}\"><?=\$this->csrf_field()?><input type=\"hidden\" name=\"action\" value=\"install_sql\"><button type=\"submit\">Install SQL</button></form><?php elseif(\$state==='update'):?><form method=\"post\" action=\"/admin/{$s}\"><?=\$this->csrf_field()?><input type=\"hidden\" name=\"action\" value=\"update_sql\"><button type=\"submit\">Update SQL</button></form><?php else:?><p>Module administration.</p><form method=\"post\" action=\"/admin/{$s}\" onsubmit=\"return confirm('Delete all module data?');\"><?=\$this->csrf_field()?><input type=\"hidden\" name=\"action\" value=\"delete_data\"><button type=\"submit\">Delete Data</button></form><?php endif?><form method=\"post\" action=\"/admin/uninstall\" onsubmit=\"return confirm('Nuke this module?');\"><?=\$this->csrf_field()?><input type=\"hidden\" name=\"module\" value=\"{$s}\"><button type=\"submit\">Nuke</button></form></section>\n<?php /* [End AI:GPT-5.6 Sol] */ ?>\n";}
+ private function adminView(string$n,string$s,bool$db):string
+ {
+  $n=htmlspecialchars($n,ENT_QUOTES,'UTF-8');$lifecycle=$db?<<<'PHP'
+<?php $state = (string) ($data['database_state'] ?? 'missing'); ?>
+<?php if ($state === 'missing') : ?>
+    <form method="post" action="/admin/{{SLUG}}">
+        <?= $this->csrf_field(); ?>
+        <input type="hidden" name="action" value="install_sql">
+        <button type="submit">Install SQL</button>
+    </form>
+<?php elseif ($state === 'update') : ?>
+    <form method="post" action="/admin/{{SLUG}}">
+        <?= $this->csrf_field(); ?>
+        <input type="hidden" name="action" value="update_sql">
+        <button type="submit">Update SQL</button>
+    </form>
+<?php elseif ($state === 'invalid') : ?>
+    <p role="alert">The database schema version is invalid or no migration path exists.</p>
+<?php else : ?>
+    <p>Module administration.</p>
+    <form method="post" action="/admin/{{SLUG}}" onsubmit="return confirm('Delete all module data?');">
+        <?= $this->csrf_field(); ?>
+        <input type="hidden" name="action" value="delete_data">
+        <button type="submit">Delete Data</button>
+    </form>
+<?php endif; ?>
+PHP:'<p>Module administration.</p>';
+  $template=<<<'PHP'
+<?php
+/* [AI:GPT-5.6 Sol | {{TIME}} UTC] */
+if (!theme::render('head', get_defined_vars())) {
+    require APPROOT . '/views/inc/head.php';
+}
+?>
+<main class="container py-4">
+    <h1>{{NAME}}</h1>
+{{LIFECYCLE}}
+    <form method="post" action="/admin/uninstall" onsubmit="return confirm('Nuke this module?');">
+        <?= $this->csrf_field(); ?>
+        <input type="hidden" name="module" value="{{SLUG}}">
+        <button type="submit">Nuke</button>
+    </form>
+</main>
+<?php
+if (!theme::render('foot', get_defined_vars())) {
+    require APPROOT . '/views/inc/foot.php';
+}
+/* [End AI:GPT-5.6 Sol] */
+PHP;
+  return str_replace(['{{NAME}}','{{SLUG}}','{{TIME}}','{{LIFECYCLE}}'],[$n,$s,gmdate('Y-m-d H:i:s'),$lifecycle],$template)."\n";
+ }
 }
 /* [End AI:GPT-5.6 Sol] */

@@ -48,7 +48,7 @@ try {
         'description'=>'Weather module for ChAoS MVC',
         'update_url'=>'https://example.com/updates/weather.json',
         'creator'=>'Test Developer','domain'=>'example.com',
-        'uses_database'=>'1','database_tables'=>"weather\nweather_readings",
+        'uses_database'=>'1','database_tables'=>"weather\nweather_readings\nweather_logs",
     ]);
     $validation = $builder->validateProject('weather');
     if (!$validation['valid']) $fail('Generated project invalid: ' . implode('; ', $validation['errors']));
@@ -67,7 +67,7 @@ try {
         'description'=>'Weather module for ChAoS MVC',
         'update_url'=>'https://example.com/updates/weather.json',
         'creator'=>'Test Developer','domain'=>'example.com','certified'=>'Yes',
-        'uses_database'=>'1','database_tables'=>"weather\nweather_readings",
+        'uses_database'=>'1','database_tables'=>"weather\nweather_readings\nweather_logs",
         'signing_sha256'=>str_repeat('a',64),'signing_key_id'=>'forced-key',
         'signing_public_key'=>base64_encode("-----BEGIN PUBLIC KEY-----\ninvalid\n-----END PUBLIC KEY-----\n"),
     ]);
@@ -83,15 +83,23 @@ try {
     if (!in_array('views/index.php', $metadata['files'], true)) $fail('index view manifest entry missing');
     if (!in_array('views/admin/weather.php', $metadata['files'], true) || !is_file($modules . '/weather/views/admin/weather.php')) $fail('slug admin view missing');
     if (!in_array('docs/CHANGELOG.md', $metadata['files'], true) || !is_file($modules . '/weather/docs/CHANGELOG.md')) $fail('generated changelog missing');
-    if (($metadata['database_tables'] ?? []) !== ['weather','weather_readings']
+    if (($metadata['database_tables'] ?? []) !== ['weather','weather_readings','weather_logs']
         || !in_array('sql/schema.sql', $metadata['files'], true)
-        || !is_file($modules . '/weather/sql/schema.sql')) $fail('generated database lifecycle metadata invalid');
+        || !in_array('sql/patches/.gitkeep', $metadata['files'], true)
+        || !is_file($modules . '/weather/sql/schema.sql')
+        || !is_file($modules . '/weather/sql/patches/.gitkeep')) $fail('generated database lifecycle metadata invalid');
+    $generatedSchema=(string)file_get_contents($modules.'/weather/sql/schema.sql');
+    foreach(['weather','weather_readings','weather_logs'] as $ownedTable)if(!str_contains($generatedSchema,'CREATE TABLE IF NOT EXISTS `'.$ownedTable.'`'))$fail('schema missing owned table '.$ownedTable);
     $generatedController = (string) file_get_contents($modules . '/weather/controllers/weather.php');
+    $generatedModel = (string) file_get_contents($modules . '/weather/models/weather_model.php');
     $generatedAdmin = (string) file_get_contents($modules . '/weather/views/admin/weather.php');
     foreach (['install_sql', 'delete_data', 'require_csrf'] as $lifecycleMarker) {
         if (!str_contains($generatedController, $lifecycleMarker)) $fail('generated controller lifecycle missing ' . $lifecycleMarker);
     }
     if (!str_contains($generatedAdmin, '/admin/uninstall')) $fail('generated Core Nuke control missing');
+    if (!str_contains($generatedModel, "return 'invalid';")
+        || !str_contains($generatedModel, "? 'update'")
+        || !str_contains($generatedAdmin, "state === 'invalid'")) $fail('fail-safe schema mismatch handling missing');
     foreach (['controllers/weather.php','models/weather_model.php','views/admin/weather.php','views/index.php'] as $generatedPhp) {
         $lintOutput=[];$lintCode=0;
         exec(escapeshellarg(PHP_BINARY).' -l '.escapeshellarg($modules.'/weather/'.$generatedPhp),$lintOutput,$lintCode);
@@ -100,7 +108,7 @@ try {
     $changelog = (string) file_get_contents($modules . '/weather/docs/CHANGELOG.md');
     if (!str_contains($changelog, '## 1.0.0 — ' . gmdate('Y-m-d')) || !str_contains($changelog, '- Initial module implementation.')) $fail('initial changelog content invalid');
     $view = (string) file_get_contents($modules . '/weather/views/index.php');
-    if (!str_contains($view, "APPROOT . '/views/inc/head.php'") || !str_contains($view, "APPROOT . '/views/inc/foot.php'")) $fail('wrappers missing');
+    if (!str_contains($view, "theme::render('head'") || !str_contains($view, "theme::render('foot'")) $fail('theme integration missing');
     $builder->createFile('weather', 'views/extra.php');
     $builder->writeFile('weather', 'views/extra.php', '<?php echo "safe";');
     if (!str_contains($builder->readFile('weather', 'views/extra.php'), 'safe')) $fail('editor failed');
@@ -204,6 +212,9 @@ try {
         if (!is_file($artifact) || !is_file($artifact . '.sig')) $fail('signed artifacts missing');
         if ($builder->artifactFile('weather', basename($artifact)) !== realpath($artifact)) $fail('artifact download resolution failed');
         try{$builder->artifactFile('weather','../module.json');$fail('artifact traversal accepted');}catch(InvalidArgumentException|RuntimeException $expected){}
+        $artifactZip=new ZipArchive();
+        if($artifactZip->open($artifact)!==true||$artifactZip->locateName('weather/sql/patches/.gitkeep')===false)$fail('packaged patches placeholder missing');
+        $artifactZip->close();
         $releaseManifest = json_decode(
             (string) file_get_contents(dirname($artifact) . '/' . basename($artifact, '.zip') . '.manifest.json'),
             true

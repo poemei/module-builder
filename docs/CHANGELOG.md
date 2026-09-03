@@ -18,6 +18,7 @@
 - Validation for generated lifecycle controls and database ownership.
 - Authenticated download links for every generated project artifact, with
   project confinement, traversal rejection, and symbolic-link rejection.
+- Packaged `sql/patches/.gitkeep` placeholder for database-backed modules.
 
 ### Changed
 
@@ -27,8 +28,19 @@
 - Core-owned Nuke remains available for both generic and database-backed modules.
 - Generated database mutations use Admin authentication, POST, CSRF protection,
   and explicit action allowlists.
+- Generated PHP now uses readable PSR-12-style formatting and the established
+  `theme::render()` header/footer contract with Core-view fallback.
 - Clarified that the release ZIP checksum is generated during build and written
   beside the artifact; it is distinct from the manifest signing identity.
+
+### Fixed
+
+- Blank, unreadable, or invalid installed schema versions now produce an
+  explicit `invalid` state instead of being reported as current.
+- Version mismatches without an exact migration patch now produce `invalid`
+  instead of silently collapsing to current.
+- Qualified manifest generation, schema creation, state detection, Delete Data,
+  and ownership validation with three module-owned tables.
 
 All notable changes to ChAoS MVC Module Builder are documented here.
 

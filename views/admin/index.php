@@ -13,7 +13,7 @@ $hasSigning=$current!==null
 require APPROOT . '/views/inc/head.php';
 ?>
 <main class="container-fluid py-4">
- <div class="d-flex justify-content-between mb-4"><div><h1>Module Builder <small class="text-muted">1.1.0</small></h1><p>Live source: <code>user/modules/&lt;slug&gt;/</code>. Output: root <code>/releases</code>.</p></div><span class="badge <?= $certification['signing']?'bg-success':'bg-secondary' ?> p-2 align-self-start"><?= $certification['signing']?'Certified signing':'Unsigned development' ?></span></div>
+ <div class="d-flex justify-content-between mb-4"><div><h1>Module Builder <small class="text-muted">1.0.7</small></h1><p>Live source: <code>user/modules/&lt;slug&gt;/</code>. Output: root <code>/releases</code>.</p></div><span class="badge <?= $certification['signing']?'bg-success':'bg-secondary' ?> p-2 align-self-start"><?= $certification['signing']?'Certified signing':'Unsigned development' ?></span></div>
  <?php if($message):?><div class="alert alert-success"><?=$e($message)?></div><?php endif?><?php if($error):?><div class="alert alert-danger"><?=$e($error)?></div><?php endif?>
  <div class="alert alert-light border"><strong>Certification:</strong> <?=$e($certification['message'])?></div>
  <section class="card mb-4">
