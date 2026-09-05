@@ -1,5 +1,83 @@
 # Changelog
 
+## [1.1.10] - 2026-09-04
+
+- Prefer PHP cURL with verified TLS for hosted certification requests and retain HTTPS streams as a fallback.
+
+## [1.1.9] - 2026-09-04
+
+- Add one-time, module-owned certification configuration under `data/`.
+- Verify and preload the account public key; never store the private key.
+- Hide setup after valid configuration and restore it when configuration data is missing.
+- Apply the configured developer identity automatically to new module projects.
+
+## [1.1.8] - 2026-09-04
+
+- Replace the legacy certification protocol with the shared read-only `/developers/verify` contract.
+- Verify exact developer, domain, module credential, algorithm, key ID, active result, and expiry before writing `certified: "Yes"`.
+- Keep certification at `No` for mismatch, expiry, malformed response, or unavailable service without disabling Builder or signing work.
+- Add per-project signing identity onboarding; verified account responses may preload the public key and OpenPGP fingerprint.
+- Cache verified assertions for up to 24 hours and negative assertions for up to five minutes; stale success is never accepted.
+- Never request, transmit, cache, or import private keys from certification.
+- Document certification and cryptographic release signing as separate trust relationships.
+
+## [1.1.7] - 2026-09-04
+
+- Replace the opaque “Validation failed” build error with every concrete project validation failure.
+- Preserve line breaks in the admin error display so each failing rule is readable.
+- Add regression coverage proving invalid projects are blocked and their exact validation cause is returned.
+
+## [1.1.6] - 2026-09-04
+
+- Keep “Build and sign current module” clickable so server-side validation can report the exact problem.
+- Remove template-only disabled logic based on cached project/signing state.
+- Retain all authoritative validation, signing-key, package, and verification gates on submission.
+
+## [1.1.5] - 2026-09-04
+
+- Write the entered developer domain into every generated local `module.json`, normalized to lowercase.
+- Write the form's certification selection as the exact local JSON string `"Yes"` or `"No"`.
+- Preserve domain and certification across ordinary project edits.
+- Keep certification metadata independent from publisher signing-key configuration.
+
+## [1.1.4] - 2026-09-04
+
+- Confirm and preserve the current-project build-and-sign transaction: Module Builder never accepts a ZIP filename from admin.
+- Label the action “Build and sign current module” to make artifact selection behavior explicit.
+- Add regression coverage proving the internally selected ZIP contains the selected module's current identity, version, and signing trust from module.json.
+
+## [1.1.3] - 2026-09-04
+
+- Gate signing on the actual PHP crypto backend, not assumptions about the host OS.
+- Reopen and verify saved JSON, signature, statement, and ZIP using public-key trust before reporting success.
+- Copy only public release files into project release data under verified/<release-identity>/; verify the copies and reject conflicting existing files.
+- Record and display build-time verification results separately from unchecked public-domain availability.
+- Add tamper tests for saved outputs, copied releases, and ZIP checksums.
+
+## [1.1.2] - 2026-09-04
+
+- Apply DEV_SIGNATURE_OPENSSL.md: generated local manifests use signing.algorithm and base64 public PEM trust.
+- Emit separate <slug>.remote.json with exactly Core's six signed release fields for the developer's update_url.
+- Emit binary ZIP.sig and exact LF/no-trailing-newline release statement for OpenSSL verification.
+- Remove stale remote JSON and statement on rebuild; preserve automatic project identifiers and lifecycle scaffolding.
+- Test generated publication JSON against the local Core verifier.
+
+## [1.1.1] - 2026-09-04
+
+- Restore automatic SHA-256 project identity generation on creation, with a matching fingerprint.
+- Preserve generated identity during ordinary settings edits; keep ZIP checksums and Core-compatible release signatures separate.
+
+## [1.1.0] - 2026-09-04
+
+- Match Core 98613e2 release statements and embedded base64 signature contract.
+- Generate RSA-3072+ or OpenPGP detached signatures; verify before emitting signed JSON.
+- Require an exact HTTPS ZIP download URL and enforce installed package host policy.
+- Separate checksum integrity, publisher signing, and certification status.
+- Stop generating arbitrary SHA-256 identities; retain optional public-key fingerprints as metadata.
+- Preserve package_hosts and extra project metadata on settings edits.
+- Add actual Core verifier/archive integration tests and explicit GnuPG dependency checks.
+- Package the signing helper and existing OpenSSL configuration in the builder manifest.
+
 ## 1.0.7 — 2026-09-02
 
 ### Added

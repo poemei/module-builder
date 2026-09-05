@@ -1,17 +1,15 @@
 {
     "module": "module_builder",
     "name": "Module Builder",
-    "version": "1.0.7",
+    "version": "1.2.1",
     "description": "Admin-only ChAoS MVC module workspace.",
 	"domain": "www.poemei.com",
 	"creator": "PM",
     "certified": "Yes",
     "signing": {
-		"type": "openpgp",
-        "fingerprint": "762379FB834CDBE299CD5A817640B4869AD65E22",
-        "type": "rsa-sha256",
+        "algorithm": "rsa-sha256",
         "fingerprint": "",
-        "sha256": "SHA-256",
+        "sha256": "",
         "key_id": "pm-aab3866b2f02eab5",
         "public_key": "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQm9qQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FZOEFNSUlCaWdLQ0FZRUF6azFuMGNBenI3K3F2SmV2VFVmYwpIcEFpK3lVVHBsdDVPWGZ2RkJrdUFCcWx2bzVaZjZqNTBCR3VVcHZVK3hDTWFNUFhTTjhQSitLQkxOZXFZOHA5CjFhUk82V2o4QUk0YmgzbUF3aDFNL1NDcGhGb3pHUm9CbVZyWElkbzRzZTlGNDErRU9jQXFydktDWUZ3OG9vbHUKWExhZVdhUk1KKzNEWFJ0by9ucGtuaElzem8wcnNaeDJWZzUyalEza1J5OVQyKzB3Sk84eHBrRGlMeHBGUFVHZgpvTkx5Y2U4TWJMS0FPYnNwWHZUbmpYRWF6N05zb3JQN2pPekJ1dXZOM1daVE1EUC9Malg0MllmZFk5SzlQV0ZhCkk1TVZLRHBQZ1hlQjljTmVIemNXZzVubE0wN1YrZ0VFdExxdk0xa25zRVRZaTBZbDJNanBtRm5pK3ZLQW8xVngKWm5LZ2hod1E0dU1RNDg1WWdQM2IxTldZOUlSVWxNVmxxNnNFNFVXbnU5aVFBdFZFeVlwYU5FcnFESkRzY2ZoZwpxMUFlWTIwTHFveFZWdXI3bDQrTG5JK3F4YUNydnJjTWlFNFc0MmdHRTBMMHRzK2Zmb2NVV1NGdmlEeHl0cENmCkVZWTdHSFhNWEQwc3I2VWxhTGhnVmhJcUlXdTFZS0l1Y3dyZHlJdThYdjhMQWdNQkFBRT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg=="
     },
@@ -19,7 +17,14 @@
     "files": [
         "controllers/module_builder.php",
         "lib/module_package_builder.php",
+        "lib/builder_release_signer.php",
+        "lib/builder_certification_client.php",
+        "data/.gitkeep",
+        "config/openssl.cnf",
         "views/admin/index.php",
-        "docs/CHANGELOG.md"
+        "docs/CHANGELOG.md",
+        "docs/CORE_RELEASE_CONTRACT.md",
+        "docs/CERTIFICATION.md",
+        "README.md"
     ]
 }

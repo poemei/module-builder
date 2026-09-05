@@ -1,6 +1,7 @@
 <?php
 /* [AI:GPT-5.6 Sol | 2026-08-29 02:45:00 UTC] */
 require dirname(__DIR__) . '/lib/module_package_builder.php';
+putenv('CHAOS_CERTIFICATION_ENDPOINT=https://chaos-mvc.org:444/developers/verify');
 $base = sys_get_temp_dir() . '/chaos-builder-test-' . bin2hex(random_bytes(5));
 $modules = $base . '/user/modules';
 $releases = $base . '/releases';
@@ -9,11 +10,35 @@ mkdir($appRoot . '/views/inc', 0775, true);
 file_put_contents($appRoot . '/views/inc/head.php', '');
 file_put_contents($appRoot . '/views/inc/foot.php', '');
 if (!defined('APPROOT')) define('APPROOT', $appRoot);
-$builder = new module_package_builder($modules, $releases);
+$builder = new module_package_builder($modules, $releases, $base . '/data/certification.json');
 $fail = static function (string $message): never {
     fwrite(STDERR, $message . PHP_EOL);
     exit(1);
 };
+$certificationClient = new builder_certification_client($base . '/certification-cache');
+$certificationResponse = [
+    'certified' => true, 'developer' => 'PM', 'domain' => 'poemei.com',
+    'certification' => 'module', 'credential_id' => '002',
+    'signing' => [
+        'algorithm' => 'rsa-sha256', 'key_id' => 'pm-test-key',
+        'public_key' => base64_encode('public-account-key'),
+    ],
+    'private_key' => 'must-never-be-consumed',
+];
+$normalizedCertification = $certificationClient->normalize(
+    $certificationResponse, 'PM', 'poemei.com', 'module', 'rsa-sha256', 'pm-test-key'
+);
+if (($normalizedCertification['certified'] ?? false) !== true
+    || ($normalizedCertification['public_key'] ?? '') !== base64_encode('public-account-key')
+    || array_key_exists('private_key', $normalizedCertification)) $fail('verified account signing identity was not safely normalized');
+if (($certificationClient->normalize(
+    $certificationResponse, 'PM', 'wrong.example', 'module', 'rsa-sha256', 'pm-test-key'
+)['certified'] ?? true) !== false) $fail('certification accepted a domain mismatch');
+$expiredCertification = $certificationResponse;
+$expiredCertification['expires_at'] = '2000-01-01T00:00:00Z';
+if (($certificationClient->normalize(
+    $expiredCertification, 'PM', 'poemei.com', 'module', 'rsa-sha256', 'pm-test-key'
+)['certified'] ?? true) !== false) $fail('certification accepted an expired credential');
 $readStoredZip = static function (string $zip) use ($fail): array {
     $entries = [];
     $offset = 0;
@@ -50,6 +75,19 @@ try {
         'creator'=>'Test Developer','domain'=>'example.com',
         'uses_database'=>'1','database_tables'=>"weather\nweather_readings\nweather_logs",
     ]);
+    $brokenMetadata = json_decode((string) file_get_contents($modules . '/weather/module.json'), true);
+    $brokenMetadata['update_url'] = 'not-https';
+    file_put_contents($modules . '/weather/module.json', json_encode($brokenMetadata, JSON_PRETTY_PRINT));
+    try {
+        $builder->buildRelease('weather');
+        $fail('invalid project was packaged');
+    } catch (RuntimeException $expected) {
+        if (!str_contains($expected->getMessage(), 'update_url must be valid HTTPS')) {
+            $fail('build did not report exact validation errors');
+        }
+    }
+    $brokenMetadata['update_url'] = 'https://example.com/updates/weather.json';
+    file_put_contents($modules . '/weather/module.json', json_encode($brokenMetadata, JSON_PRETTY_PRINT));
     $validation = $builder->validateProject('weather');
     if (!$validation['valid']) $fail('Generated project invalid: ' . implode('; ', $validation['errors']));
     $metadata = json_decode((string) file_get_contents($modules . '/weather/module.json'), true);
@@ -57,9 +95,10 @@ try {
     $expectedKeys = ['name','module','version','description','update_url','creator','domain','certified','signing','database_tables','files','routes'];
     if (array_keys($metadata) !== $expectedKeys) $fail('module metadata shape or order invalid');
     if ($metadata['certified'] !== 'No'
-        || !preg_match('/^[a-f0-9]{64}$/', $metadata['signing']['sha256'] ?? '')
+        || preg_match('/^[a-f0-9]{64}$/', $metadata['signing']['sha256'] ?? '') !== 1
+        || $metadata['signing']['fingerprint'] !== $metadata['signing']['sha256']
         || ($metadata['signing']['key_id'] ?? null) !== ''
-        || ($metadata['signing']['public_key'] ?? null) !== '') $fail('server-generated project SHA-256 invalid');
+        || ($metadata['signing']['public_key'] ?? null) !== '') $fail('New module must receive matching SHA-256 and fingerprint identity metadata');
     $firstProjectSha = $metadata['signing']['sha256'];
     $builder->deleteProject('weather');
     $builder->createProject([
@@ -68,16 +107,17 @@ try {
         'update_url'=>'https://example.com/updates/weather.json',
         'creator'=>'Test Developer','domain'=>'example.com','certified'=>'Yes',
         'uses_database'=>'1','database_tables'=>"weather\nweather_readings\nweather_logs",
-        'signing_sha256'=>str_repeat('a',64),'signing_key_id'=>'forced-key',
+        'signing_sha256'=>str_repeat('a',64),'signing_fingerprint'=>'forced-fingerprint','signing_key_id'=>'forced-key',
         'signing_public_key'=>base64_encode("-----BEGIN PUBLIC KEY-----\ninvalid\n-----END PUBLIC KEY-----\n"),
     ]);
     $metadata = json_decode((string) file_get_contents($modules . '/weather/module.json'), true);
     if ($metadata['certified'] !== 'No'
-        || !preg_match('/^[a-f0-9]{64}$/', $metadata['signing']['sha256'] ?? '')
-        || $metadata['signing']['sha256'] === str_repeat('a',64)
+        || preg_match('/^[a-f0-9]{64}$/', $metadata['signing']['sha256'] ?? '') !== 1
+        || $metadata['signing']['fingerprint'] !== $metadata['signing']['sha256']
         || $metadata['signing']['sha256'] === $firstProjectSha
+        || $metadata['signing']['sha256'] === str_repeat('a',64)
         || ($metadata['signing']['key_id'] ?? null) !== ''
-        || ($metadata['signing']['public_key'] ?? null) !== '') $fail('project creation did not generate its own SHA-256');
+        || ($metadata['signing']['public_key'] ?? null) !== '') $fail('Project creation must not accept an arbitrary publisher identity');
     $listedProject = array_values(array_filter($builder->listProjects(), static fn(array $project): bool => $project['slug'] === 'weather'))[0] ?? null;
     if (($listedProject['signing']['sha256'] ?? '') !== $metadata['signing']['sha256']) $fail('generated SHA-256 is not available to Project Settings');
     if (!in_array('views/index.php', $metadata['files'], true)) $fail('index view manifest entry missing');
@@ -156,7 +196,7 @@ try {
         'signing_public_key'=>$pair['public_key'],
     ]);
     $signedMetadata = json_decode((string) file_get_contents($modules . '/weather/module.json'), true);
-    if ($signedMetadata['signing'] !== ['type'=>'rsa-sha256','fingerprint'=>$pair['fingerprint_sha256'],'sha256'=>$pair['sha256'],'key_id'=>$pair['key_id'],'public_key'=>$pair['public_key']]) $fail('certified signing metadata mismatch');
+    if ($signedMetadata['signing'] !== ['algorithm'=>'rsa-sha256','fingerprint'=>$pair['fingerprint_sha256'],'sha256'=>$pair['sha256'],'key_id'=>$pair['key_id'],'public_key'=>$pair['public_key']]) $fail('certified signing metadata mismatch');
     if (!$builder->validateProject('weather')['valid']) $fail('certified project validation failed');
     $projects = $builder->listProjects();
     $selected = 'weather';
@@ -182,7 +222,11 @@ try {
     } finally {
         restore_error_handler();
     }
-    if (!str_contains($renderedAdmin, 'Build &amp; Sign Release')) $fail('admin signing controls failed to render');
+    if (!str_contains($renderedAdmin, 'Build and sign current module')
+        || str_contains($renderedAdmin, 'ZIP name')
+        || preg_match('/name=["\']artifact["\']/', $renderedAdmin)) {
+        $fail('admin current-module signing controls failed to render safely');
+    }
     $zip = $builder->buildSigningKeypairZip($pair);
     $entries = $readStoredZip($zip);
     $names = array_keys($entries);
@@ -207,24 +251,32 @@ try {
         $artifact = $builder->buildAndSignReleaseWithPem(
             'weather',
             $entries['private-key.pem'],
-            'correct-horse-battery-staple'
+            'correct-horse-battery-staple',
+            'https://example.com/releases/weather-1.0.1.zip'
         );
         if (!is_file($artifact) || !is_file($artifact . '.sig')) $fail('signed artifacts missing');
         if ($builder->artifactFile('weather', basename($artifact)) !== realpath($artifact)) $fail('artifact download resolution failed');
         try{$builder->artifactFile('weather','../module.json');$fail('artifact traversal accepted');}catch(InvalidArgumentException|RuntimeException $expected){}
         $artifactZip=new ZipArchive();
         if($artifactZip->open($artifact)!==true||$artifactZip->locateName('weather/sql/patches/.gitkeep')===false)$fail('packaged patches placeholder missing');
+        $packedModule = json_decode((string) $artifactZip->getFromName('weather/module.json'), true);
+        if (!is_array($packedModule)
+            || ($packedModule['module'] ?? '') !== 'weather'
+            || ($packedModule['version'] ?? '') !== ($signedMetadata['version'] ?? '')
+            || ($packedModule['signing'] ?? []) !== ($signedMetadata['signing'] ?? [])) {
+            $fail('build-and-sign did not package the selected module current module.json');
+        }
         $artifactZip->close();
         $releaseManifest = json_decode(
             (string) file_get_contents(dirname($artifact) . '/' . basename($artifact, '.zip') . '.manifest.json'),
             true
         );
         if (($releaseManifest['signed'] ?? false) !== true
-            || ($releaseManifest['signature_algorithm'] ?? '') !== 'RSA-SHA256'
+            || ($releaseManifest['signature_algorithm'] ?? '') !== 'rsa-sha256'
             || ($releaseManifest['key_id'] ?? '') !== $pair['key_id']) $fail('signed manifest invalid');
-        $releaseSignature = base64_decode(trim((string) file_get_contents($artifact . '.sig')), true);
+        $releaseSignature = file_get_contents($artifact . '.sig');
         if ($releaseSignature === false
-            || openssl_verify(hash_file('sha256', $artifact), $releaseSignature, $entries['public-key.pem'], OPENSSL_ALGO_SHA256) !== 1) $fail('release signature verification failed');
+            || openssl_verify(builder_release_signer::statement('module', $releaseManifest), $releaseSignature, $entries['public-key.pem'], OPENSSL_ALGO_SHA256) !== 1) $fail('release signature verification failed');
     }
 
     $pair = [];

@@ -60,7 +60,9 @@ class module_builder extends controller
             'content' => $content,
             'validation' => $selected === '' ? null : $builder->validateProject($selected),
             'artifacts' => $selected === '' ? [] : $builder->listArtifacts($selected),
-            'certification' => $builder->certificationStatus(),
+            'certification' => $builder->certificationStatus($selected),
+            'builder_config' => $builder->builderConfig(),
+            'config_required' => $builder->configRequired(),
             'message' => $message,
             'error' => $error,
             'csrf_field' => $this->csrf_field(),
@@ -73,6 +75,9 @@ class module_builder extends controller
         $project = (string) ($_POST['project'] ?? '');
 
         switch ($action) {
+            case 'save_builder_config':
+                $builder->saveBuilderConfig($_POST);
+                return 'Builder configuration saved. Certification status is shown separately.';
             case 'create_project':
                 $builder->createProject($_POST);
                 return 'Project created.';
@@ -102,9 +107,10 @@ class module_builder extends controller
                 $artifact = $builder->buildAndSignRelease(
                     $project,
                     $_FILES['private_key'] ?? [],
-                    (string) ($_POST['private_key_passphrase'] ?? '')
+                    (string) ($_POST['private_key_passphrase'] ?? ''),
+                    (string) ($_POST['download_url'] ?? '')
                 );
-                return 'Signed release built: ' . basename($artifact);
+                return 'Release built and signed; saved files and local release-data copies verified: ' . basename($artifact) . '. Developer-domain publication is still required; the domain has not been checked.';
             case 'generate_keypair':
                 $keypair = $builder->generateSigningKeypair(
                     (string) ($_POST['key_passphrase'] ?? ''),

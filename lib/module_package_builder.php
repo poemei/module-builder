@@ -1,22 +1,31 @@
 <?php
+if (!class_exists('builder_release_signer', false)) {
+    require_once __DIR__ . '/builder_release_signer.php';
+}
+if (!class_exists('builder_certification_client', false)) {
+    require_once __DIR__ . '/builder_certification_client.php';
+}
 /* [AI:GPT-5.6 Sol | 2026-08-29 02:30:00 UTC] */
 class module_package_builder
 {
  private const SELF='module_builder'; private const LIMIT=1048576;
  private const TEXT=['php','json','md','txt','css','js','html','xml','sql','svg','yml','yaml'];
- private string $modules; private string $releases;
- public function __construct(?string $modules=null,?string $releases=null){$this->modules=$modules??USERROOT.'/modules';$this->releases=$releases??dirname(USERROOT).'/releases';$this->mkdir($this->modules);$this->mkdir($this->releases);}
+ private string $modules; private string $releases; private string $configFile;
+ public function __construct(?string $modules=null,?string $releases=null,?string $configFile=null){$this->modules=$modules??USERROOT.'/modules';$this->releases=$releases??dirname(USERROOT).'/releases';$this->configFile=$configFile??__DIR__.'/../data/certification.json';$this->mkdir($this->modules);$this->mkdir($this->releases);$this->mkdir(dirname($this->configFile));}
+ public function builderConfig():array{return$this->json($this->configFile,false);}
+ public function configRequired():bool{$c=$this->builderConfig();return!isset($c['developer'],$c['domain'],$c['algorithm'],$c['key_id'],$c['transport_key'])||$c['developer']===''||$c['domain']===''||$c['key_id']===''||!in_array($c['algorithm'],['rsa-sha256','openpgp'],true)||!preg_match('/^[a-f0-9]{64}$/',(string)$c['transport_key']);}
+ public function saveBuilderConfig(array$in):void{$old=$this->builderConfig();$developer=trim((string)($in['developer']??''));$domain=strtolower(trim((string)($in['domain']??'')));$algorithm=strtolower(trim((string)($in['algorithm']??'')));$keyId=strtolower(trim((string)($in['key_id']??'')));$transportKey=strtolower(trim((string)($in['transport_key']??$old['transport_key']??'')));if($developer===''||filter_var('https://'.$domain,FILTER_VALIDATE_URL)===false||!in_array($algorithm,['rsa-sha256','openpgp'],true)||!preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/',$keyId)||!preg_match('/^[a-f0-9]{64}$/',$transportKey))throw new InvalidArgumentException('Enter a valid developer, domain, signing algorithm, key ID, and transport key.');$base=['developer'=>$developer,'domain'=>$domain,'algorithm'=>$algorithm,'key_id'=>$keyId,'transport_key'=>$transportKey];$this->write($this->configFile,$this->encode($base));$result=(new builder_certification_client($this->releases.'/.certification-cache'))->verify($developer,$domain,'module',$algorithm,$keyId);$this->write($this->configFile,$this->encode($base+['public_key'=>is_string($result['public_key']??null)?$result['public_key']:'','fingerprint'=>(string)($result['fingerprint']??''),'credential_id'=>(string)($result['credential_id']??''),'verification_state'=>(string)($result['state']??'unavailable'),'verified_at'=>(string)($result['verified_at']??'')]));}
  public function isValidSlug(string $s):bool{return(bool)preg_match('/^[a-z][a-z0-9_]{1,62}$/',$s);}
- public function listProjects():array{$out=[];foreach(glob($this->modules.'/*',GLOB_ONLYDIR)?:[]as$d){$s=basename($d);if($s===self::SELF||!$this->isValidSlug($s)||is_link($d))continue;$m=$this->json($d.'/module.json',false);$out[]=['slug'=>$s,'name'=>(string)($m['name']??$s),'version'=>(string)($m['version']??''),'description'=>(string)($m['description']??''),'update_url'=>(string)($m['update_url']??''),'creator'=>(string)($m['creator']??''),'domain'=>(string)($m['domain']??''),'certified'=>(string)($m['certified']??'No'),'signing'=>is_array($m['signing']??null)?$m['signing']:[]];}usort($out,fn($a,$b)=>strcmp($a['slug'],$b['slug']));return$out;}
+ public function listProjects():array{$out=[];foreach(glob($this->modules.'/*',GLOB_ONLYDIR)?:[]as$d){$s=basename($d);if($s===self::SELF||!$this->isValidSlug($s)||is_link($d))continue;$m=$this->json($d.'/module.json',false);if(is_array($m['signing']??null))$m['signing']['type']??=$m['signing']['algorithm']??'none';$out[]=['slug'=>$s,'name'=>(string)($m['name']??$s),'version'=>(string)($m['version']??''),'description'=>(string)($m['description']??''),'update_url'=>(string)($m['update_url']??''),'creator'=>(string)($m['creator']??''),'domain'=>(string)($m['domain']??''),'certified'=>(string)($m['certified']??'No'),'package_hosts'=>(array)($m['package_hosts']??[]),'signing'=>is_array($m['signing']??null)?$m['signing']:[]];}usort($out,fn($a,$b)=>strcmp($a['slug'],$b['slug']));return$out;}
  public function createProject(array $in):void
  {
-  $s=strtolower(trim((string)($in['slug']??'')));$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$in['certified']='No';$in['signing_sha256']=hash('sha256',random_bytes(32));$in['signing_key_id']='';$in['signing_public_key']='';$metadata=$this->projectMetadata($s,$n,$v,$in);if($s===self::SELF)throw new InvalidArgumentException('Reserved slug.');
+  $in=array_replace(['creator'=>'','domain'=>'','signing_type'=>'none','signing_key_id'=>''],$in);$cfg=$this->builderConfig();if(!$this->configRequired()){$in['creator']=$cfg['developer'];$in['domain']=$cfg['domain'];$in['signing_type']=$cfg['algorithm'];$in['signing_key_id']=$cfg['key_id'];}$s=strtolower(trim((string)($in['slug']??'')));$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$in['certified']='No';$in['signing_sha256']=hash('sha256',random_bytes(32));$in['signing_fingerprint']=$in['signing_sha256'];$in['signing_public_key']='';$in=$this->preloadCertifiedIdentity($in);if($in['signing_key_id']!==''&&($in['signing_public_key']??'')===''){$in['signing_type']='none';$in['signing_key_id']='';}$metadata=$this->projectMetadata($s,$n,$v,$in);$metadata['certified']=$this->certificationFor($metadata)?'Yes':'No';if($s===self::SELF)throw new InvalidArgumentException('Reserved slug.');
   $usesDatabase=isset($in['uses_database']);$tableInput=trim((string)($in['database_tables']??''));$tables=$usesDatabase?$this->databaseTables($s,$tableInput===''?$s:$tableInput):[];
   $r=$this->modules.'/'.$s;if(file_exists($r))throw new RuntimeException('Project exists.');$directories=['/controllers','/views/admin','/docs'];if($usesDatabase)$directories=array_merge($directories,['/models','/sql','/sql/patches']);foreach($directories as$d)$this->mkdir($r.$d);
   $files=['controllers/'.$s.'.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];if($usesDatabase)$files=['controllers/'.$s.'.php','models/'.$s.'_model.php','views/admin/'.$s.'.php','views/index.php','sql/schema.sql','sql/patches/.gitkeep','docs/CHANGELOG.md'];if($usesDatabase)$metadata['database_tables']=$tables;$metadata['files']=$files;$metadata['routes']=['index'];
   try{$this->write($r.'/module.json',$this->encode($metadata));$this->write($r.'/controllers/'.$s.'.php',$this->controller($s,$usesDatabase));if($usesDatabase){$this->write($r.'/models/'.$s.'_model.php',$this->model($s,$tables,$v));$this->write($r.'/sql/schema.sql',$this->schema($tables,$v));$this->write($r.'/sql/patches/.gitkeep','');}$this->write($r.'/views/index.php',$this->publicView($n));$this->write($r.'/views/admin/'.$s.'.php',$this->adminView($n,$s,$usesDatabase));$this->write($r.'/docs/CHANGELOG.md',$this->changelog($v));}catch(Throwable$e){$this->remove($r);throw$e;}
  }
- public function editProject(string$s,array$in):void{$r=$this->root($s);$m=$this->json($r.'/module.json');$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$updated=$this->projectMetadata($s,$n,$v,$in);if(array_key_exists('database_tables',$m))$updated['database_tables']=$m['database_tables'];$updated['files']=$m['files']??['controllers/'.$s.'.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];$updated['routes']=$m['routes']??['index'];$this->write($r.'/module.json',$this->encode($updated));}
+ public function editProject(string$s,array$in):void{$r=$this->root($s);$m=$this->json($r.'/module.json');$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));foreach(['type','fingerprint','sha256','key_id','public_key']as$field){$in['signing_'.$field]??=$m['signing'][$field]??($field==='type'?($m['signing']['algorithm']??'none'):'');}$in=$this->preloadCertifiedIdentity($in);$updated=$this->projectMetadata($s,$n,$v,$in);if(isset($in['package_hosts']))$updated['package_hosts']=array_values(array_filter(preg_split('/[\s,]+/',strtolower(trim((string)$in['package_hosts'])))?:[]));if(array_key_exists('database_tables',$m))$updated['database_tables']=$m['database_tables'];$updated['files']=$m['files']??['controllers/'.$s.'.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];$updated['routes']=$m['routes']??['index'];$final=array_replace($m,$updated);$final['certified']=$this->certificationFor($final)?'Yes':'No';$this->write($r.'/module.json',$this->encode($final));}
  public function deleteProject(string$s):void{$this->remove($this->root($s));}
  public function fileTree(string$s):array{$r=$this->root($s);$o=[];$it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($r,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::SELF_FIRST);foreach($it as$i){if($i->isLink())continue;$o[]=['path'=>str_replace('\\','/',substr($i->getPathname(),strlen($r)+1)),'directory'=>$i->isDir()];}usort($o,fn($a,$b)=>strcmp($a['path'],$b['path']));return$o;}
  public function readFile(string$s,string$p):string{$f=$this->existing($s,$p,true);$this->editable($f);$c=file_get_contents($f);if(!is_string($c))throw new RuntimeException('Read failed.');return$c;}
@@ -28,22 +37,23 @@ class module_package_builder
  public function validateProject(string$s):array
  {
   $r=$this->root($s);$m=$this->json($r.'/module.json',false);$e=[];$c=$r.'/controllers/'.$s.'.php';$v=$r.'/views/index.php';$admin='views/admin/'.$s.'.php';
+  try{$this->meta($s,(string)($m['name']??''),(string)($m['version']??''));}catch(InvalidArgumentException $error){$e[]=$error->getMessage();}
   if(($m['module']??null)!==$s)$e[]='module metadata must match slug.';
   foreach(['name','module','version','description','update_url','creator','domain','certified','signing','files','routes']as$f)if(!array_key_exists($f,$m))$e[]='Missing metadata: '.$f;
   $usesDatabase=array_key_exists('database_tables',$m);
   if(isset($m['update_url'])&&(filter_var($m['update_url'],FILTER_VALIDATE_URL)===false||parse_url($m['update_url'],PHP_URL_SCHEME)!=='https'))$e[]='update_url must be valid HTTPS.';
   if(isset($m['certified'])&&!in_array($m['certified'],['Yes','No'],true))$e[]='certified must be Yes or No.';
   $signing=$m['signing']??null;if(!is_array($signing))$e[]='signing metadata must be an object.';else{
-   foreach(['type','fingerprint','sha256','key_id','public_key']as$f)if(!array_key_exists($f,$signing))$e[]='Missing signing metadata: '.$f;
-   $type=(string)($signing['type']??'');$fingerprint=(string)($signing['fingerprint']??'');$sha=(string)($signing['sha256']??'');$keyId=(string)($signing['key_id']??'');$publicKey=(string)($signing['public_key']??'');
-   if(!in_array($type,['sha256','rsa-sha256','openpgp'],true))$e[]='signing.type must be sha256, rsa-sha256, or openpgp.';
+   foreach(['key_id','public_key']as$f)if(!array_key_exists($f,$signing))$e[]='Missing signing metadata: '.$f;
+   if(isset($signing['algorithm'],$signing['type'])&&strtolower($signing['algorithm'])!==strtolower($signing['type']))$e[]='Conflicting signing algorithms.';
+   $type=strtolower((string)($signing['algorithm']??$signing['type']??'none'));if($type==='pgp')$type='openpgp';$fingerprint=(string)($signing['fingerprint']??'');$sha=(string)($signing['sha256']??'');$keyId=(string)($signing['key_id']??'');$publicKey=(string)($signing['public_key']??'');
+   if(!in_array($type,['none','sha256','rsa-sha256','openpgp'],true))$e[]='signing.type must be none, rsa-sha256, or openpgp.';
    if(strlen($fingerprint)>255)$e[]='signing.fingerprint must not exceed 255 characters.';
-   if(!preg_match('/^[a-f0-9]{64}$/',$sha))$e[]='signing.sha256 is required and must be lowercase SHA-256.';
+   if($sha!==''&&!preg_match('/^[a-f0-9]{64}$/',$sha))$e[]='Optional public-key sha256 must be lowercase SHA-256.';
    if($keyId!==''&&!preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/',$keyId))$e[]='signing.key_id is invalid.';
-   if($type==='rsa-sha256'&&$publicKey!==''){$pem=base64_decode($publicKey,true);if($pem===false||!str_contains($pem,'-----BEGIN PUBLIC KEY-----'))$e[]='RSA signing.public_key must be base64 public PEM.';}
-   if($type==='openpgp'&&$publicKey!==''&&base64_decode($publicKey,true)===false)$e[]='OpenPGP signing.public_key must be compact base64 data.';
+   if($type==='rsa-sha256'&&$publicKey!==''){$pem=str_starts_with($publicKey,'-----BEGIN ')?$publicKey:base64_decode($publicKey,true);if($pem===false||!str_contains($pem,'-----BEGIN PUBLIC KEY-----'))$e[]='RSA signing.public_key must be base64 public PEM.';}
+   if($type==='openpgp'&&$publicKey!==''&&!str_starts_with($publicKey,'-----BEGIN PGP PUBLIC KEY BLOCK-----')&&base64_decode($publicKey,true)===false)$e[]='OpenPGP signing.public_key must be compact base64 data.';
    if(($keyId==='')!==($publicKey===''))$e[]='signing.key_id and signing.public_key must be supplied together.';
-   if(($m['certified']??'No')==='Yes'&&($sha===''||$keyId===''||$publicKey===''))$e[]='Certified modules require complete signing metadata.';
   }
   if(!is_file($c))$e[]='Required controller missing.';else{$x=(string)file_get_contents($c);if(!preg_match('/function\s+index\s*\(/',$x))$e[]='Controller index() missing.';if(!preg_match('/function\s+admin\s*\(/',$x))$e[]='Controller admin() missing.';if($usesDatabase)foreach(['install_sql','update_sql','delete_data','require_csrf']as$required)if(!str_contains($x,$required))$e[]='Controller lifecycle missing: '.$required.'.';}
   if(!is_file($v))$e[]='views/index.php missing.';else{$x=(string)file_get_contents($v);foreach(["theme::render('head'","theme::render('foot'"]as$w)if(!str_contains($x,$w))$e[]='Theme integration missing: '.$w;}
@@ -57,12 +67,14 @@ class module_package_builder
  }
  public function buildRelease(string$s):string
  {
-  if(!$this->validateProject($s)['valid'])throw new RuntimeException('Validation failed.');if(!class_exists('ZipArchive'))throw new RuntimeException('ZIP extension required.');
-  $r=$this->root($s);$m=$this->json($r.'/module.json');$base=$s.'-'.$m['version'];$out=$this->artifactRoot($s,true);$zipPath=$out.'/'.$base.'.zip';$tmp=$zipPath.'.tmp-'.bin2hex(random_bytes(5));$z=new ZipArchive();if($z->open($tmp,ZipArchive::CREATE|ZipArchive::OVERWRITE)!==true)throw new RuntimeException('ZIP create failed.');
+  $validation=$this->validateProject($s);
+  if(!$validation['valid'])throw new RuntimeException("Project validation failed:\n- ".implode("\n- ",$validation['errors']));
+  if(!class_exists('ZipArchive'))throw new RuntimeException('ZIP extension required.');
+  $r=$this->root($s);$m=$this->json($r.'/module.json');$m['certified']=$this->certificationFor($m)?'Yes':'No';$m['signing']['algorithm']=$m['signing']['algorithm']??$m['signing']['type']??'none';unset($m['signing']['type']);$this->write($r.'/module.json',$this->encode($m));$base=$s.'-'.$m['version'];$out=$this->artifactRoot($s,true);$zipPath=$out.'/'.$base.'.zip';$tmp=$zipPath.'.tmp-'.bin2hex(random_bytes(5));$z=new ZipArchive();if($z->open($tmp,ZipArchive::CREATE|ZipArchive::OVERWRITE)!==true)throw new RuntimeException('ZIP create failed.');
   try{foreach($this->fileTree($s)as$entry){if(!$entry['directory']){$f=$this->existing($s,$entry['path'],true);if(!$z->addFile($f,$s.'/'.$entry['path']))throw new RuntimeException('ZIP add failed.');}}}finally{$z->close();}
-  if(!rename($tmp,$zipPath))throw new RuntimeException('ZIP finalize failed.');$hash=hash_file('sha256',$zipPath);$this->write($out.'/'.$base.'.sha256',$hash.'  '.basename($zipPath).PHP_EOL);$this->write($out.'/'.$base.'.manifest.json',$this->encode(['module'=>$s,'version'=>$m['version'],'artifact'=>basename($zipPath),'sha256'=>$hash,'signed'=>false,'built_at'=>gmdate('c')]));return$zipPath;
+  if(!rename($tmp,$zipPath))throw new RuntimeException('ZIP finalize failed.');if(is_file($zipPath.'.sig')||is_link($zipPath.'.sig')){if(!unlink($zipPath.'.sig'))throw new RuntimeException('Cannot invalidate the previous signature.');}builder_release_signer::invalidatePublication($zipPath,$s);$hash=hash_file('sha256',$zipPath);$this->write($out.'/'.$base.'.sha256',$hash.'  '.basename($zipPath).PHP_EOL);$this->write($out.'/'.$base.'.manifest.json',$this->encode(['module'=>$s,'version'=>$m['version'],'artifact'=>basename($zipPath),'sha256'=>$hash,'signed'=>false,'built_at'=>gmdate('c')]));return$zipPath;
  }
- public function listArtifacts(string$s):array{$r=$this->artifactRoot($s,false);if(!is_dir($r))return[];$o=[];foreach(scandir($r)?:[]as$n){$p=$r.'/'.$n;if($n==='.'||$n==='..'||!is_file($p)||is_link($p))continue;$o[]=['name'=>$n,'size'=>filesize($p),'modified'=>filemtime($p)];}usort($o,fn($a,$b)=>$b['modified']<=>$a['modified']);return$o;}
+ public function listArtifacts(string$s):array{$r=$this->artifactRoot($s,false);if(!is_dir($r))return[];$o=[];foreach(scandir($r)?:[]as$n){$p=$r.'/'.$n;if($n==='.'||$n==='..'||!is_file($p)||is_link($p))continue;$release=str_ends_with($n,'.manifest.json')?$this->json($p,false):[];$o[]=['name'=>$n,'size'=>filesize($p),'modified'=>filemtime($p),'verification'=>is_array($release['verification']??null)?$release['verification']:[],'signature_algorithm'=>($release['signed']??false)===true?(string)($release['signature_algorithm']??''):'','signature'=>is_string($release['signature']??null)?$release['signature']:''];}usort($o,fn($a,$b)=>$b['modified']<=>$a['modified']);return$o;}
  public function artifactFile(string$s,string$n):string
  {
   if($n!==basename($n)||!preg_match('/^[A-Za-z0-9._-]{1,240}$/',$n))throw new InvalidArgumentException('Invalid artifact.');
@@ -70,10 +82,46 @@ class module_package_builder
   if($resolvedRoot===false||$resolved===false||!str_starts_with($resolved,$resolvedRoot.DIRECTORY_SEPARATOR)||!is_file($resolved))throw new RuntimeException('Artifact was not found.');
   return$resolved;
  }
- public function certificationStatus():array
+ private function preloadCertifiedIdentity(array $input):array
  {
-  $id=$this->json(USERROOT.'/data/certified_developer.json',false);$url=trim((string)(getenv('CHAOS_CERTIFICATION_ENDPOINT')?:''));$s=['certified'=>false,'signing'=>false,'message'=>'Full development and unsigned packaging available; signing is not configured.'];if($url===''||$id===[])return$s;if(!$this->https($url)){$s['message']='Certification endpoint must be public HTTPS.';return$s;}
-  $q=http_build_query(['developer_id'=>(string)($id['developer_id']??''),'domain'=>(string)($id['domain']??($_SERVER['HTTP_HOST']??'')),'key_id'=>(string)($id['key_id']??''),'capability'=>'module_signing']);$raw=@file_get_contents($url.'?'.$q,false,stream_context_create(['http'=>['timeout'=>5,'ignore_errors'=>true]]));$r=is_string($raw)?json_decode($raw,true):null;if(!is_array($r)){$s['message']='Certification status unavailable; unsigned development remains available.';return$s;}$s['certified']=($r['certified']??false)===true;$s['signing']=$s['certified']&&($r['signing']['module']??false)===true;$s['key_id']=(string)($r['key_id']??'');$s['message']=$s['signing']?'Certified signing authorized; private keys are never retained.':'Unsigned development remains fully available; signing not authorized.';return$s;
+  $cfg=$this->builderConfig();if(!$this->configRequired()&&!empty($cfg['public_key'])&&($input['creator']??'')===$cfg['developer']&&strtolower((string)($input['domain']??''))===$cfg['domain']&&strtolower((string)($input['signing_type']??''))===$cfg['algorithm']&&strtolower((string)($input['signing_key_id']??''))===$cfg['key_id']){$input['signing_public_key']=$cfg['public_key'];$input['signing_fingerprint']=$cfg['fingerprint']??($input['signing_fingerprint']??'');}
+  $algorithm=strtolower(trim((string)($input['signing_type']??'')));if($algorithm==='pgp')$algorithm='openpgp';
+  $result=(new builder_certification_client($this->releases.'/.certification-cache'))->verify(
+   (string)($input['creator']??''),(string)($input['domain']??''),'module',$algorithm,(string)($input['signing_key_id']??'')
+  );
+  if(($result['certified']??false)===true&&is_string($result['public_key']??null)&&$result['public_key']!==''){
+   $input['signing_public_key']=$result['public_key'];
+   if(is_string($result['fingerprint']??null)&&$result['fingerprint']!=='')$input['signing_fingerprint']=$result['fingerprint'];
+  }
+  return$input;
+ }
+ private function certificationFor(array $metadata):bool
+ {
+  $trust=is_array($metadata['signing']??null)?$metadata['signing']:[];
+  $algorithm=strtolower((string)($trust['algorithm']??$trust['type']??''));
+  if($algorithm==='pgp')$algorithm='openpgp';
+  $result=(new builder_certification_client($this->releases.'/.certification-cache'))->verify(
+   (string)($metadata['creator']??''),(string)($metadata['domain']??''),'module',$algorithm,(string)($trust['key_id']??'')
+  );
+  return($result['certified']??false)===true&&($result['signing']??false)===true;
+ }
+ public function certificationStatus(string $slug=''):array
+ {
+  $status=['state'=>'not_verified','certified'=>false,'signing'=>false,'message'=>'Certification: Not Verified. Select a project and configure its developer identity; Builder and signing remain available.'];
+  $c=$this->builderConfig();if(!$this->configRequired())return(new builder_certification_client($this->releases.'/.certification-cache'))->verify($c['developer'],$c['domain'],'module',$c['algorithm'],$c['key_id']);
+  if(!$this->isValidSlug($slug)||$slug===self::SELF){$c=$this->builderConfig();if($this->configRequired())return$status;return(new builder_certification_client($this->releases.'/.certification-cache'))->verify($c['developer'],$c['domain'],'module',$c['algorithm'],$c['key_id']);}
+  try{$metadata=$this->json($this->root($slug).'/module.json');}
+  catch(Throwable $error){return$status;}
+  $trust=is_array($metadata['signing']??null)?$metadata['signing']:[];
+  $algorithm=strtolower((string)($trust['algorithm']??$trust['type']??''));
+  if($algorithm==='pgp')$algorithm='openpgp';
+  return(new builder_certification_client($this->releases.'/.certification-cache'))->verify(
+   (string)($metadata['creator']??''),
+   (string)($metadata['domain']??''),
+   'module',
+   $algorithm,
+   (string)($trust['key_id']??'')
+  );
  }
  /**
   * Generate an encrypted 3072-bit RSA keypair for SHA-256 signatures.
@@ -216,56 +264,39 @@ class module_package_builder
  /**
   * Build and sign a release using a one-request uploaded encrypted PEM.
   */
- public function buildAndSignRelease(string$s,array$upload,string$passphrase):string
+ public function buildAndSignRelease(string$s,array$upload,string$passphrase,string$download=''):string
  {
   if(($upload['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK||!is_uploaded_file((string)($upload['tmp_name']??'')))throw new RuntimeException('The encrypted private-key.pem upload is required.');
   $pem=file_get_contents((string)$upload['tmp_name']);
-  if(!is_string($pem))throw new RuntimeException('The private key could not be read.');
-  try{return$this->buildAndSignReleaseWithPem($s,$pem,$passphrase);}
+  if(!is_string($pem)||strlen($pem)>self::LIMIT)throw new RuntimeException('The private key could not be read or exceeds 1 MiB.');
+  try{return$this->buildAndSignReleaseWithPem($s,$pem,$passphrase,$download);}
   finally{$pem=null;}
  }
 
  /**
   * Build and sign from PEM already held in memory.
   */
- public function buildAndSignReleaseWithPem(string$s,string$pem,string$passphrase):string
+ public function buildAndSignReleaseWithPem(string$s,string$pem,string$passphrase,string$download=''):string
  {
-  if($passphrase==='')throw new InvalidArgumentException('The private-key passphrase is required.');
   $root=$this->root($s);$metadata=$this->json($root.'/module.json');
-  if(($metadata['certified']??'No')!=='Yes')throw new RuntimeException('The module must be marked certified before a signed release can be built.');
-  $signing=$metadata['signing']??[];
-  if(!is_array($signing)||(string)($signing['type']??'')!=='rsa-sha256'||!preg_match('/^[a-f0-9]{64}$/',(string)($signing['sha256']??''))||trim((string)($signing['key_id']??''))===''||trim((string)($signing['public_key']??''))==='')throw new RuntimeException('Complete RSA-SHA256 developer signing metadata is required.');
-
-  $key=@openssl_pkey_get_private($pem,$passphrase);
-  if($key===false)throw new RuntimeException('The private key or passphrase is invalid.');
-  $details=openssl_pkey_get_details($key);
-  if(!is_array($details)||!isset($details['key']))throw new RuntimeException('The private key public identity could not be read.');
-  $public=(string)$details['key'];
-  $expectedPublic=preg_replace('/\s+/','',(string)$signing['public_key'])??'';
-  if(!hash_equals($expectedPublic,base64_encode($public)))throw new RuntimeException('The private key does not match module.json signing.public_key.');
-  if(!hash_equals((string)$signing['sha256'],hash('sha256',$public)))throw new RuntimeException('The private key does not match module.json signing.sha256.');
-
-  $artifact=$this->buildRelease($s);
-  $signature='';
-  $payload=hash_file('sha256',$artifact);
-  if(!is_string($payload)||!openssl_sign($payload,$signature,$key,OPENSSL_ALGO_SHA256)){
-   @unlink($artifact);
-   throw new RuntimeException('The release could not be signed.');
-  }
-
+  builder_release_signer::publication($metadata,$download);
+  builder_release_signer::requireBackend(builder_release_signer::algorithm((array)($metadata['signing']??[])));
+  $artifact=$this->buildRelease($s);$metadata=$this->json($this->root($s).'/module.json');
+  $manifest=builder_release_signer::sign('module',$metadata,$artifact,$download,$pem,$passphrase);
   $signaturePath=$artifact.'.sig';
-  $this->write($signaturePath,base64_encode($signature).PHP_EOL);
+  try {
+   foreach(builder_release_signer::releaseFiles('module',$metadata,$manifest,$artifact) as $path=>$contents)$this->write($path,$contents);
+   $manifest['verification']=builder_release_signer::verifyWrittenRelease('module',$metadata,$manifest,$artifact);
+   $manifest['verification']=builder_release_signer::stageLocalRelease('module',$metadata,$manifest,$artifact);
+  } catch (Throwable $exception) {
+   builder_release_signer::invalidatePublication($artifact,$s);
+   throw $exception;
+  }
   $base=basename($artifact,'.zip');
   $manifestPath=$this->artifactRoot($s,false).'/'.$base.'.manifest.json';
-  $manifest=$this->json($manifestPath);
-  $manifest['signed']=true;
-  $manifest['signature']=basename($signaturePath);
-  $manifest['signature_algorithm']='RSA-SHA256';
-  $manifest['key_id']=(string)$signing['key_id'];
-  $manifest['signed_at']=gmdate('c');
   $this->write($manifestPath,$this->encode($manifest));
 
-  $pem=null;$public=null;$signature=null;$payload=null;
+  $pem=null;
   return$artifact;
  }
  private function root(string$s):string{if(!$this->isValidSlug($s)||$s===self::SELF)throw new InvalidArgumentException('Invalid project.');$base=realpath($this->modules);$r=is_link($this->modules.'/'.$s)?false:realpath($this->modules.'/'.$s);if($base===false||$r===false||!str_starts_with($r,$base.DIRECTORY_SEPARATOR))throw new RuntimeException('Project outside module root.');return$r;}
@@ -281,12 +312,13 @@ class module_package_builder
   $creator=trim((string)($in['creator']??''));
   $domain=strtolower(trim((string)($in['domain']??'')));
   $certified=(string)($in['certified']??'No');
-  $type=strtolower(trim((string)($in['signing_type']??'sha256')));
+  $type=strtolower(trim((string)($in['signing_type']??'none')));
+  if($type==='sha256')$type='none';if($type==='pgp')$type='openpgp';
   $fingerprint=trim((string)($in['signing_fingerprint']??''));
   $sha=strtolower(trim((string)($in['signing_sha256']??'')));
   $keyId=strtolower(trim((string)($in['signing_key_id']??'')));
   $publicInput=(string)($in['signing_public_key']??'');
-  $publicKey=$type==='rsa-sha256'?$this->normalizePublicKey($publicInput):preg_replace('/\s+/','',trim($publicInput));
+  $publicKey=$type==='rsa-sha256'?$this->normalizePublicKey($publicInput):(str_starts_with(trim($publicInput),'-----BEGIN ')?base64_encode(trim($publicInput)):preg_replace('/\s+/','',trim($publicInput)));
   $publicKey=is_string($publicKey)?$publicKey:'';
 
   if($description===''||strlen($description)>500)throw new InvalidArgumentException('Description is required and must be 500 characters or fewer.');
@@ -294,15 +326,14 @@ class module_package_builder
   if($creator===''||strlen($creator)>100)throw new InvalidArgumentException('Creator is required and must be 100 characters or fewer.');
   if(!preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/',$domain))throw new InvalidArgumentException('A valid domain name is required.');
   if(!in_array($certified,['Yes','No'],true))throw new InvalidArgumentException('Certified must be Yes or No.');
-  if(!in_array($type,['sha256','rsa-sha256','openpgp'],true))throw new InvalidArgumentException('Signing type must be SHA-256, RSA-SHA256, or OpenPGP.');
+  if(!in_array($type,['none','sha256','rsa-sha256','openpgp'],true))throw new InvalidArgumentException('Signature algorithm must be None, RSA-SHA256, or OpenPGP.');
   if(strlen($fingerprint)>255)throw new InvalidArgumentException('Signing fingerprint must not exceed 255 characters.');
 
-  if(!preg_match('/^[a-f0-9]{64}$/',$sha))throw new InvalidArgumentException('Signing SHA-256 is required and must be 64 lowercase hexadecimal characters.');
+  if($sha!==''&&!preg_match('/^[a-f0-9]{64}$/',$sha))throw new InvalidArgumentException('Optional public-key SHA-256 must be 64 lowercase hexadecimal characters.');
   if($keyId!==''&&!preg_match('/^[a-z0-9][a-z0-9_-]{2,63}$/',$keyId))throw new InvalidArgumentException('Signing key ID is invalid.');
   if($type==='rsa-sha256'&&$publicKey!==''){$decoded=base64_decode($publicKey,true);if($decoded===false||!str_contains($decoded,'-----BEGIN PUBLIC KEY-----')||!str_contains($decoded,'-----END PUBLIC KEY-----'))throw new InvalidArgumentException('RSA signing public key must be a base64-encoded public PEM.');}
   if($type==='openpgp'&&$publicKey!==''&&base64_decode($publicKey,true)===false)throw new InvalidArgumentException('OpenPGP public key must be compact base64 data.');
   if(($keyId==='')!==($publicKey===''))throw new InvalidArgumentException('Signing key ID and public PEM must be supplied together.');
-  if($certified==='Yes'&&($sha===''||$keyId===''||$publicKey===''))throw new InvalidArgumentException('Certified modules require complete signing metadata.');
 
   return[
    'name'=>$n,
@@ -314,7 +345,7 @@ class module_package_builder
    'domain'=>$domain,
    'certified'=>$certified,
    'signing'=>[
-    'type'=>$type,
+    'algorithm'=>$type,
     'fingerprint'=>$fingerprint,
     'sha256'=>$sha,
     'key_id'=>$keyId,
