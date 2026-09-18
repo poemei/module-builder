@@ -22,10 +22,10 @@ class module_package_builder
   $in=array_replace(['creator'=>'','domain'=>'','signing_type'=>'none','signing_key_id'=>''],$in);$cfg=$this->builderConfig();if(!$this->configRequired()){$in['creator']=$cfg['developer'];$in['domain']=$cfg['domain'];$in['signing_type']=$cfg['algorithm'];$in['signing_key_id']=$cfg['key_id'];}$s=strtolower(trim((string)($in['slug']??'')));$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));$in['certified']='No';$in['signing_sha256']=hash('sha256',random_bytes(32));$in['signing_fingerprint']=$in['signing_sha256'];$in['signing_public_key']='';$in=$this->preloadCertifiedIdentity($in);if($in['signing_key_id']!==''&&($in['signing_public_key']??'')===''){$in['signing_type']='none';$in['signing_key_id']='';}$metadata=$this->projectMetadata($s,$n,$v,$in);$metadata['certified']=$this->certificationFor($metadata)?'Yes':'No';if($s===self::SELF)throw new InvalidArgumentException('Reserved slug.');
   $usesDatabase=isset($in['uses_database']);$tableInput=trim((string)($in['database_tables']??''));$tables=$usesDatabase?$this->databaseTables($s,$tableInput===''?$s:$tableInput):[];
   $r=$this->modules.'/'.$s;if(file_exists($r))throw new RuntimeException('Project exists.');$directories=['/controllers','/views/admin','/docs'];if($usesDatabase)$directories=array_merge($directories,['/models','/sql','/sql/patches']);foreach($directories as$d)$this->mkdir($r.$d);
-  $files=['controllers/'.$s.'.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];if($usesDatabase)$files=['controllers/'.$s.'.php','models/'.$s.'_model.php','views/admin/'.$s.'.php','views/index.php','sql/schema.sql','sql/patches/.gitkeep','docs/CHANGELOG.md'];if($usesDatabase)$metadata['database_tables']=$tables;$metadata['files']=$files;$metadata['routes']=['index'];
+  $files=['controllers/'.$s.'.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];if($usesDatabase)$files=['controllers/'.$s.'.php','models/'.$s.'_model.php','views/admin/'.$s.'.php','views/index.php','sql/schema.sql','sql/patches/.gitkeep','docs/CHANGELOG.md'];if($usesDatabase)$metadata['database_tables']=$tables;$metadata['files']=$files;$metadata['routes']=['index'];if(isset($in['index_parameters']))$metadata['index_parameters']=true;
   try{$this->write($r.'/module.json',$this->encode($metadata));$this->write($r.'/controllers/'.$s.'.php',$this->controller($s,$usesDatabase));if($usesDatabase){$this->write($r.'/models/'.$s.'_model.php',$this->model($s,$tables,$v));$this->write($r.'/sql/schema.sql',$this->schema($tables,$v));$this->write($r.'/sql/patches/.gitkeep','');}$this->write($r.'/views/index.php',$this->publicView($n));$this->write($r.'/views/admin/'.$s.'.php',$this->adminView($n,$s,$usesDatabase));$this->write($r.'/docs/CHANGELOG.md',$this->changelog($v));}catch(Throwable$e){$this->remove($r);throw$e;}
  }
- public function editProject(string$s,array$in):void{$r=$this->root($s);$m=$this->json($r.'/module.json');$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));foreach(['type','fingerprint','sha256','key_id','public_key']as$field){$in['signing_'.$field]??=$m['signing'][$field]??($field==='type'?($m['signing']['algorithm']??'none'):'');}$in=$this->preloadCertifiedIdentity($in);$updated=$this->projectMetadata($s,$n,$v,$in);if(isset($in['package_hosts']))$updated['package_hosts']=array_values(array_filter(preg_split('/[\s,]+/',strtolower(trim((string)$in['package_hosts'])))?:[]));if(array_key_exists('database_tables',$m))$updated['database_tables']=$m['database_tables'];$updated['files']=$m['files']??['controllers/'.$s.'.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];$updated['routes']=$m['routes']??['index'];$final=array_replace($m,$updated);$final['certified']=$this->certificationFor($final)?'Yes':'No';$this->write($r.'/module.json',$this->encode($final));}
+ public function editProject(string$s,array$in):void{$r=$this->root($s);$m=$this->json($r.'/module.json');$n=trim((string)($in['name']??''));$v=trim((string)($in['version']??''));foreach(['type','fingerprint','sha256','key_id','public_key']as$field){$in['signing_'.$field]??=$m['signing'][$field]??($field==='type'?($m['signing']['algorithm']??'none'):'');}$in=$this->preloadCertifiedIdentity($in);$updated=$this->projectMetadata($s,$n,$v,$in);if(isset($in['package_hosts']))$updated['package_hosts']=array_values(array_filter(preg_split('/[\s,]+/',strtolower(trim((string)$in['package_hosts'])))?:[]));if(array_key_exists('database_tables',$m))$updated['database_tables']=$m['database_tables'];$updated['files']=$m['files']??['controllers/'.$s.'.php','views/admin/'.$s.'.php','views/index.php','docs/CHANGELOG.md'];$updated['routes']=$m['routes']??['index'];if(array_key_exists('index_parameters',$in)){$updated['index_parameters']=filter_var($in['index_parameters'],FILTER_VALIDATE_BOOL);}elseif(array_key_exists('index_parameters',$m)){$updated['index_parameters']=(bool)$m['index_parameters'];}$final=array_replace($m,$updated);if(array_key_exists('index_parameters',$in)&&!$updated['index_parameters'])unset($final['index_parameters']);$final['certified']=$this->certificationFor($final)?'Yes':'No';$this->write($r.'/module.json',$this->encode($final));}
  public function deleteProject(string$s):void{$this->remove($this->root($s));}
  public function fileTree(string$s):array{$r=$this->root($s);$o=[];$it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($r,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::SELF_FIRST);foreach($it as$i){if($i->isLink())continue;$o[]=['path'=>str_replace('\\','/',substr($i->getPathname(),strlen($r)+1)),'directory'=>$i->isDir()];}usort($o,fn($a,$b)=>strcmp($a['path'],$b['path']));return$o;}
  public function readFile(string$s,string$p):string{$f=$this->existing($s,$p,true);$this->editable($f);$c=file_get_contents($f);if(!is_string($c))throw new RuntimeException('Read failed.');return$c;}
@@ -36,13 +36,14 @@ class module_package_builder
  public function deletePath(string$s,string$p):void{$f=$this->existing($s,$p,false);if(is_dir($f))$this->remove($f);elseif(!unlink($f))throw new RuntimeException('Delete failed.');}
  public function validateProject(string$s):array
  {
-  $r=$this->root($s);$m=$this->json($r.'/module.json',false);$e=[];$c=$r.'/controllers/'.$s.'.php';$v=$r.'/views/index.php';$admin='views/admin/'.$s.'.php';
+  $r=$this->root($s);$m=$this->json($r.'/module.json',false);$e=[];$c=$r.'/controllers/'.$s.'.php';
   try{$this->meta($s,(string)($m['name']??''),(string)($m['version']??''));}catch(InvalidArgumentException $error){$e[]=$error->getMessage();}
   if(($m['module']??null)!==$s)$e[]='module metadata must match slug.';
   foreach(['name','module','version','description','update_url','creator','domain','certified','signing','files','routes']as$f)if(!array_key_exists($f,$m))$e[]='Missing metadata: '.$f;
-  $usesDatabase=array_key_exists('database_tables',$m);
   if(isset($m['update_url'])&&(filter_var($m['update_url'],FILTER_VALIDATE_URL)===false||parse_url($m['update_url'],PHP_URL_SCHEME)!=='https'))$e[]='update_url must be valid HTTPS.';
   if(isset($m['certified'])&&!in_array($m['certified'],['Yes','No'],true))$e[]='certified must be Yes or No.';
+  if(array_key_exists('index_parameters',$m)&&!is_bool($m['index_parameters']))$e[]='index_parameters must be true or false when declared.';
+
   $signing=$m['signing']??null;if(!is_array($signing))$e[]='signing metadata must be an object.';else{
    foreach(['key_id','public_key']as$f)if(!array_key_exists($f,$signing))$e[]='Missing signing metadata: '.$f;
    if(isset($signing['algorithm'],$signing['type'])&&strtolower($signing['algorithm'])!==strtolower($signing['type']))$e[]='Conflicting signing algorithms.';
@@ -55,15 +56,51 @@ class module_package_builder
    if($type==='openpgp'&&$publicKey!==''&&!str_starts_with($publicKey,'-----BEGIN PGP PUBLIC KEY BLOCK-----')&&base64_decode($publicKey,true)===false)$e[]='OpenPGP signing.public_key must be compact base64 data.';
    if(($keyId==='')!==($publicKey===''))$e[]='signing.key_id and signing.public_key must be supplied together.';
   }
-  if(!is_file($c))$e[]='Required controller missing.';else{$x=(string)file_get_contents($c);if(!preg_match('/function\s+index\s*\(/',$x))$e[]='Controller index() missing.';if(!preg_match('/function\s+admin\s*\(/',$x))$e[]='Controller admin() missing.';if($usesDatabase)foreach(['install_sql','update_sql','delete_data','require_csrf']as$required)if(!str_contains($x,$required))$e[]='Controller lifecycle missing: '.$required.'.';}
-  if(!is_file($v))$e[]='views/index.php missing.';else{$x=(string)file_get_contents($v);foreach(["theme::render('head'","theme::render('foot'"]as$w)if(!str_contains($x,$w))$e[]='Theme integration missing: '.$w;}
-  if(!is_file($r.'/'.$admin))$e[]=$admin.' missing.';
-  if(!is_array($m['routes']??null)||!in_array('index',$m['routes'],true))$e[]='routes[] must include index.';
-  foreach(['controllers/'.$s.'.php',$admin,'views/index.php','docs/CHANGELOG.md']as$f)if(!is_array($m['files']??null)||!in_array($f,$m['files'],true))$e[]='files must include '.$f.'.';
-  if($usesDatabase){$tables=$m['database_tables'];if(!is_array($tables)||$tables===[])$e[]='database_tables must declare at least one owned table.';else foreach($tables as$table)if(!is_string($table)||($table!==$s&&!str_starts_with($table,$s.'_'))||!preg_match('/^[a-z][a-z0-9_]{1,62}$/',$table))$e[]='Invalid module-owned database table: '.(string)$table.'.';foreach(['models/'.$s.'_model.php','sql/schema.sql','sql/patches/.gitkeep']as$f)if(!is_array($m['files']??null)||!in_array($f,$m['files'],true))$e[]='files must include '.$f.'.';if(!is_file($r.'/sql/schema.sql'))$e[]='sql/schema.sql missing.';if(!is_file($r.'/sql/patches/.gitkeep'))$e[]='sql/patches/.gitkeep missing.';}
-  if(is_file($r.'/'.$admin)&&!str_contains((string)file_get_contents($r.'/'.$admin),'/admin/uninstall'))$e[]='Admin Core Nuke control missing.';
+
+  $files=$m['files']??null;
+  if(!is_array($files))$e[]='files metadata must be an array.';else{
+   $seen=[];
+   foreach($files as$f){
+    if(!is_string($f)||$f===''||isset($seen[$f])){$e[]='files contains an invalid or duplicate path.';continue;}
+    $seen[$f]=true;
+    try{$relative=$this->path($f);}catch(InvalidArgumentException $error){$e[]='Invalid files path: '.(string)$f.'.';continue;}
+    if(!is_file($r.'/'.$relative)||is_link($r.'/'.$relative))$e[]='Declared file missing: '.$relative.'.';
+   }
+  }
+
+  if(!is_file($c))$e[]='Required controller missing.';
+  $controllerSource=is_file($c)?(string)file_get_contents($c):'';
+  if(is_array($files)&&!in_array('controllers/'.$s.'.php',$files,true))$e[]='files must include controllers/'.$s.'.php.';
   if(!is_file($r.'/docs/CHANGELOG.md'))$e[]='docs/CHANGELOG.md missing.';
-  return['valid'=>$e===[],'errors'=>$e];
+  elseif(is_array($files)&&!in_array('docs/CHANGELOG.md',$files,true))$e[]='files must include docs/CHANGELOG.md.';
+
+  $routes=$m['routes']??null;
+  if(!is_array($routes))$e[]='routes metadata must be an array.';else{
+   $routeSeen=[];
+   foreach($routes as$route){
+    if(!is_string($route)||!preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/',$route)){$e[]='Invalid declared route: '.(string)$route.'.';continue;}
+    if(isset($routeSeen[$route])){$e[]='Duplicate declared route: '.$route.'.';continue;}
+    $routeSeen[$route]=true;
+    if($controllerSource!==''&&!preg_match('/public\s+function\s+'.preg_quote($route,'/').'\s*\(/',$controllerSource))$e[]='Declared route has no public controller method: '.$route.'.';
+   }
+  }
+  if(($m['index_parameters']??false)===true){
+   if(!is_array($routes)||!in_array('index',$routes,true))$e[]='index_parameters requires index in routes[].';
+   if($controllerSource===''||!preg_match('/public\s+function\s+index\s*\(/',$controllerSource))$e[]='index_parameters requires public controller index().';
+  }
+
+  $hasAdmin=$controllerSource!==''&&preg_match('/public\s+function\s+admin\s*\(/',$controllerSource)===1;
+  $adminSlug='views/admin/'.$s.'.php';$adminIndex='views/admin/index.php';
+  $adminView=is_file($r.'/'.$adminSlug)?$adminSlug:(is_file($r.'/'.$adminIndex)?$adminIndex:'');
+  if($hasAdmin&&$adminView==='')$e[]='Controller admin() exists but no Admin view was found.';
+
+  $tables=$m['database_tables']??[];$usesDatabase=is_array($tables)&&$tables!==[];
+  if(array_key_exists('database_tables',$m)&&!is_array($m['database_tables']))$e[]='database_tables must be an array when declared.';
+  if($usesDatabase){
+   foreach($tables as$table)if(!is_string($table)||($table!==$s&&!str_starts_with($table,$s.'_'))||!preg_match('/^[a-z][a-z0-9_]{1,62}$/',$table))$e[]='Invalid module-owned database table: '.(string)$table.'.';
+  }
+
+  return['valid'=>$e===[],'errors'=>array_values(array_unique($e))];
  }
  public function buildRelease(string$s):string
  {
