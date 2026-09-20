@@ -2,13 +2,13 @@
 
 > **Build modules. Validate them. Package them. Ship them.**
 
-**Module Builder 1.1.12** is the developer workspace for creating and packaging modules for ChAoS MVC.
+**Module Builder 1.2.2** is the developer workspace for creating and packaging modules for ChAoS MVC.
 
 It provides a controlled development environment inside ChAoS MVC while keeping module development where it belongs: **outside the Core.**
 
 ---
 
-## ✦ Module Builder 1.1.8
+## ✦ Module Builder 1.2.2
 
 Module Builder is an **admin-only development tool**.
 
@@ -73,7 +73,7 @@ Every generated `module.json` declares `name`, `module`, `version`,
 `description`, `update_url`, `creator`, `domain`, `certified`, `signing`,
 `files`, and `routes`. Database-backed projects additionally declare
 `database_tables`. The
-`signing` object uses the canonical `type`, `fingerprint`, `sha256`,
+`signing` object uses the canonical `algorithm`, `fingerprint`, `sha256`,
 `key_id`, and `public_key` shape. New projects are unsigned and receive a generated SHA-256 project identity and matching fingerprint. Release ZIP checksums and publisher signatures remain separate.
 Key ID and public key are optional, but must be supplied together. Projects use
 `"certified": "No"`.
@@ -226,8 +226,12 @@ Initial projects are unsigned. Creation automatically generates a unique SHA-256
 Non-secret certification identity is configured in:
 
 ```text
-user/data/certified_developer.json
+user/modules/module_builder/data/certification.json
 ```
+
+This runtime file contains installation-specific certification state and is
+excluded from Git and release packages. Module Builder creates and maintains it
+on the installed site.
 
 RSA signing keys are held in memory apart from PHP's temporary upload. OpenPGP requires PHP GnuPG 1.5+ and uses an isolated private temporary keyring removed after signing.
 
@@ -317,7 +321,7 @@ Grow outward.
 
 ---
 
-**ChAoS MVC Module Builder 1.1.8**
+**ChAoS MVC Module Builder 1.2.2**
 
 *Protect the Core. Grow outward.*
 
@@ -327,7 +331,7 @@ Local `module.json` uses `signing.algorithm`, `key_id`, and the base64 public ke
 
 Signing creates `<slug>.remote.json` for publication at your configured `update_url`, a binary `.zip.sig`, and an exact `-release.txt` statement. The remote JSON contains the six Core release fields, including a verified signature; the versioned `.manifest.json` remains the builder receipt. Download the files from the project's artifacts; publication to your developer domain is manual. See [the signing contract](docs/CORE_RELEASE_CONTRACT.md).
 
-### Verification gates (1.1.8)
+### Verification gates (1.2.2)
 
 The builder checks its actual PHP OpenSSL/GnuPG backend, validates the package, signs and verifies the statement, then reopens the saved files and verifies the ZIP checksum and signature using only the configured public key. It then copies the four public files (ZIP, remote JSON, binary signature, statement) into the project's managed release directory under `verified/<release-identity>/` and verifies those copies. Private keys are not copied. Conflicting staged files cause failure, not overwrite.
 

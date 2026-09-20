@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.2] - 2026-09-20
+
+- Complete live module-project creation, editing, validation, and bounded file operations.
+- Support generic and database-backed module scaffolding with explicit lifecycle metadata.
+- Generate, retain, and download versioned release artifacts and verified local release history.
+- Integrate read-only developer certification without granting certification signing authority.
+- Support RSA-SHA256 and OpenPGP release signing through the shared Core release contract.
+- Emit the exact six-field remote update JSON consumed by ChAoS MVC Core.
+- Align documentation with the canonical `signing.algorithm` metadata and the module-owned certification configuration path.
+- Exclude installation-specific `data/certification.json` runtime state from source control and release packages.
+- Reserve live OpenPGP round-trip qualification for a Linux server with PHP GnuPG 1.5 or newer.
+
 ## [1.1.10] - 2026-09-04
 
 - Prefer PHP cURL with verified TLS for hosted certification requests and retain HTTPS streams as a fallback.
