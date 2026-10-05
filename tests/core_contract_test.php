@@ -128,12 +128,7 @@ try {
     $weakKey = openssl_pkey_new($weakOptions);
     openssl_pkey_export($weakKey, $weakPrivate, 'fixture-passphrase', $weakOptions);
     $weakInput = array_replace($input, ['signing_public_key' => base64_encode(openssl_pkey_get_details($weakKey)['key'])]);
-    $builder->editProject('fixture', $weakInput);
-    $weakMetadata = json_decode(file_get_contents($base . '/projects/fixture/' . $kind . '.json'), true);
-    $weakArtifact = $builder->buildRelease('fixture');
-    $reject(fn() => builder_release_signer::sign($kind, $weakMetadata, $weakArtifact, $download, $weakPrivate, 'fixture-passphrase'), 'RSA below 3072 bits accepted.');
-    if (file_exists($remotePath)) $fail('Rebuild retained stale remote publication JSON.');
-    if (file_exists($weakArtifact . '.sig')) $fail('Rebuild retained stale signature.');
+    $reject(fn() => $builder->editProject('fixture', $weakInput), 'RSA below 3072 bits accepted into project trust.');
     echo ucfirst($kind) . " RSA signing, Core verification, Core archive validation and tamper tests passed.\n";
 
     // PGP uses a disposable publisher, never the operator's default keyring.

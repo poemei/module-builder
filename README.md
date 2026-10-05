@@ -235,7 +235,7 @@ on the installed site.
 
 RSA signing keys are held in memory apart from PHP's temporary upload. OpenPGP requires PHP GnuPG 1.5+ and uses an isolated private temporary keyring removed after signing.
 
-Module Builder can generate a Windows-compatible 3072-bit RSA keypair for
+Module Builder generates a Windows-compatible 4096-bit RSA keypair for
 RSA-SHA256 signing. The private PEM is encrypted with a developer-supplied
 passphrase. The keypair downloads as a ZIP containing `private-key.pem`,
 `public-key.pem`, and `key-metadata.json`. The metadata provides the
@@ -243,6 +243,11 @@ developer-generated `sha256`, `key_id`, and base64 `public_key` values
 used by `module.json`. The generator uses the bundled
 `config/openssl.cnf` so it does not depend on a working global Windows
 OpenSSL configuration. No generated key material is written to the server.
+
+Every generated key is reopened and inspected before download. Module Builder
+rejects any generated or supplied RSA public key below **3072 bits**, matching
+the ChAoS MVC Core updater contract. The key ZIP records the inspected key size
+rather than trusting caller-provided metadata.
 
 The matching private key is supplied for the individual signing request. Core's trusted key, not a certification badge or checksum, authenticates updates.
 

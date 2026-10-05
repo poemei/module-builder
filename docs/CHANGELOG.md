@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.3] - 2026-10-05
+
+- Generate RSA-SHA256 signing keys at 4096 bits, above Core's required
+  3072-bit minimum.
+- Inspect the generated OpenSSL key before export and fail if its actual type
+  or size does not satisfy the Core updater contract.
+- Reject imported RSA public keys and keypair ZIP metadata backed by keys below
+  3072 bits instead of allowing an update that Core will reject later.
+- Record the inspected RSA size in key metadata rather than trusting a supplied
+  `rsa_bits` value.
+
 ## [1.2.2] - 2026-09-20
 
 - Complete live module-project creation, editing, validation, and bounded file operations.

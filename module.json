@@ -1,7 +1,7 @@
 {
     "module": "module_builder",
     "name": "Module Builder",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "description": "Admin-only ChAoS MVC module workspace.",
 	"domain": "www.poemei.com",
 	"creator": "PM",

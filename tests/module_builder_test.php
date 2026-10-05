@@ -170,7 +170,7 @@ try {
         }
     }
     $pair = $builder->generateSigningKeypair('correct-horse-battery-staple', 'testdev');
-    if (($pair['algorithm'] ?? '') !== 'RSA-SHA256' || ($pair['type'] ?? '') !== 'rsa-sha256' || ($pair['rsa_bits'] ?? 0) < 3072) $fail('RSA keypair shape invalid');
+    if (($pair['algorithm'] ?? '') !== 'RSA-SHA256' || ($pair['type'] ?? '') !== 'rsa-sha256' || ($pair['rsa_bits'] ?? 0) !== 4096) $fail('RSA keypair shape invalid');
     if (!preg_match('/^[a-f0-9]{64}$/', $pair['sha256']) || !str_starts_with($pair['key_id'], 'testdev-')) $fail('module signing identity invalid');
     if (base64_decode($pair['public_key'], true) !== $pair['public_key_pem']) $fail('base64 public key invalid');
 
@@ -243,6 +243,7 @@ try {
 
     $keyMetadata = json_decode($entries['key-metadata.json'], true);
     if (!is_array($keyMetadata)) $fail('key metadata invalid');
+    if (($keyMetadata['rsa_bits'] ?? 0) !== 4096) $fail('key metadata did not record the inspected RSA size');
     if (($keyMetadata['fingerprint_sha256'] ?? '') !== $pair['fingerprint_sha256']) $fail('key fingerprint mismatch');
     if (array_key_exists('private_key_pem', $keyMetadata) || str_contains($entries['key-metadata.json'], 'PRIVATE KEY')) $fail('private key leaked into metadata');
     if (is_dir($releases) && (glob($releases . '/*') ?: []) !== []) $fail('key generation wrote release artifacts');

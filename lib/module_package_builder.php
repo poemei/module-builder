@@ -9,6 +9,7 @@ if (!class_exists('builder_certification_client', false)) {
 class module_package_builder
 {
  private const SELF='module_builder'; private const LIMIT=1048576;
+ private const MIN_RSA_BITS=3072; private const GENERATED_RSA_BITS=4096;
  private const TEXT=['php','json','md','txt','css','js','html','xml','sql','svg','yml','yaml'];
  private string $modules; private string $releases; private string $configFile;
  public function __construct(?string $modules=null,?string $releases=null,?string $configFile=null){$this->modules=$modules??USERROOT.'/modules';$this->releases=$releases??dirname(USERROOT).'/releases';$this->configFile=$configFile??__DIR__.'/../data/certification.json';$this->mkdir($this->modules);$this->mkdir($this->releases);$this->mkdir(dirname($this->configFile));}
@@ -161,7 +162,7 @@ class module_package_builder
   );
  }
  /**
-  * Generate an encrypted 3072-bit RSA keypair for SHA-256 signatures.
+  * Generate an encrypted 4096-bit RSA keypair for SHA-256 signatures.
   *
   * The returned PEM material exists only in memory and must be downloaded by
   * the caller. Module Builder never writes generated keys to disk.
@@ -177,10 +178,15 @@ class module_package_builder
   $key=openssl_pkey_new([
    'config'=>dirname(__DIR__).'/config/openssl.cnf',
    'private_key_type'=>OPENSSL_KEYTYPE_RSA,
-   'private_key_bits'=>3072,
+   'private_key_bits'=>self::GENERATED_RSA_BITS,
    'digest_alg'=>'sha256',
   ]);
   if($key===false)throw new RuntimeException('OpenSSL could not generate the RSA keypair.');
+
+  $details=openssl_pkey_get_details($key);
+  if(!is_array($details)||($details['type']??null)!==OPENSSL_KEYTYPE_RSA||
+   (int)($details['bits']??0)<self::MIN_RSA_BITS||!isset($details['key']))
+   throw new RuntimeException('OpenSSL generated an RSA key below the required 3072-bit minimum.');
 
   $private='';
   if(!openssl_pkey_export($key,$private,$passphrase,[
@@ -188,10 +194,6 @@ class module_package_builder
    'digest_alg'=>'sha256',
   ]))
    throw new RuntimeException('OpenSSL could not export the encrypted private key.');
-
-  $details=openssl_pkey_get_details($key);
-  if(!is_array($details)||!isset($details['key']))
-   throw new RuntimeException('OpenSSL could not export the public key.');
 
   $public=(string)$details['key'];
   $fingerprint=hash('sha256',$public);
@@ -202,7 +204,7 @@ class module_package_builder
    'version'=>1,
    'algorithm'=>'RSA-SHA256',
    'type'=>'rsa-sha256',
-   'rsa_bits'=>(int)($details['bits']??3072),
+   'rsa_bits'=>(int)$details['bits'],
    'fingerprint_sha256'=>$fingerprint,
    'sha256'=>$fingerprint,
    'key_id'=>$keyId,
@@ -226,13 +228,18 @@ class module_package_builder
    throw new InvalidArgumentException('Encrypted private-key PEM is missing.');
   if(!is_string($public)||!str_contains($public,'BEGIN PUBLIC KEY'))
    throw new InvalidArgumentException('Public-key PEM is missing.');
+  $publicResource=@openssl_pkey_get_public($public);
+  $publicDetails=$publicResource===false?false:openssl_pkey_get_details($publicResource);
+  if(!is_array($publicDetails)||($publicDetails['type']??null)!==OPENSSL_KEYTYPE_RSA||
+   (int)($publicDetails['bits']??0)<self::MIN_RSA_BITS)
+   throw new InvalidArgumentException('RSA signing keys must be at least 3072 bits.');
 
   $metadata=[
    'format'=>(string)($pair['format']??'chaos-rsa-signing-keypair'),
    'version'=>(int)($pair['version']??1),
    'algorithm'=>(string)($pair['algorithm']??'RSA-SHA256'),
    'type'=>(string)($pair['type']??'rsa-sha256'),
-   'rsa_bits'=>(int)($pair['rsa_bits']??3072),
+   'rsa_bits'=>(int)$publicDetails['bits'],
    'fingerprint_sha256'=>(string)($pair['fingerprint_sha256']??''),
    'sha256'=>(string)($pair['sha256']??''),
    'key_id'=>(string)($pair['key_id']??''),
@@ -396,7 +403,7 @@ class module_package_builder
   $value=trim(str_replace(["\r\n","\r"],"\n",$value));if($value==='')return'';
   if(str_contains($value,'-----BEGIN PUBLIC KEY-----'))$pem=$value."\n";
   else{$compact=preg_replace('/\s+/','',$value)??'';$decoded=base64_decode($compact,true);if($decoded===false)throw new InvalidArgumentException('Signing public key must be PEM or base64 public-key data.');if(str_contains($decoded,'-----BEGIN PUBLIC KEY-----'))$pem=trim(str_replace(["\r\n","\r"],"\n",$decoded))."\n";else$pem="-----BEGIN PUBLIC KEY-----\n".chunk_split(base64_encode($decoded),64,"\n")."-----END PUBLIC KEY-----\n";}
-  $key=@openssl_pkey_get_public($pem);if($key===false)throw new InvalidArgumentException('Signing public key is not valid.');$details=openssl_pkey_get_details($key);$canonical=is_array($details)?($details['key']??null):null;if(!is_string($canonical)||!str_contains($canonical,'-----BEGIN PUBLIC KEY-----'))throw new InvalidArgumentException('Signing public key is not valid.');return base64_encode($canonical);
+  $key=@openssl_pkey_get_public($pem);if($key===false)throw new InvalidArgumentException('Signing public key is not valid.');$details=openssl_pkey_get_details($key);$canonical=is_array($details)?($details['key']??null):null;if(!is_string($canonical)||!str_contains($canonical,'-----BEGIN PUBLIC KEY-----'))throw new InvalidArgumentException('Signing public key is not valid.');if(($details['type']??null)!==OPENSSL_KEYTYPE_RSA||(int)($details['bits']??0)<self::MIN_RSA_BITS)throw new InvalidArgumentException('RSA signing public keys must be at least 3072 bits.');return base64_encode($canonical);
  }
  private function databaseTables(string$s,string$value):array
  {
